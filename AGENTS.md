@@ -24,6 +24,10 @@ AI agent framework with three layers: **Frontend** (React/Angular/Vanilla) → *
 - **Simplicity** — prefer the simplest correct solution. For non-trivial changes, consider if there's a cleaner approach before committing.
 - **Worktrees** — always work in a git worktree for isolation. See [Git & PRs](.claude/docs/git.md) for the full workflow.
 
+## Angular (`packages/angular`)
+
+Work toward first-class Angular support (`@copilotkitnext/angular`), aligned with React v2 in `packages/react-core`. **Before any change under `packages/angular/`, read [packages/angular/AGENTS.md](packages/angular/AGENTS.md) in full** (program context, write scope, breaking-change policy, CI). Do not paste that file into this section; do not assume React or Vue docs apply.
+
 ## Private Agent Instructions
 
 Individual developers may optionally create a `private-agents.md` file at the repo root. This file is gitignored and not shared with the team -- it contains personal agent instructions, workflow overrides, or context that applies only to that developer's work. If `private-agents.md` exists, read it and follow its instructions (they take precedence over the defaults in this file where they conflict).

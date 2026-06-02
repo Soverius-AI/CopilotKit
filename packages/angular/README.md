@@ -1,5 +1,7 @@
 # CopilotKit for Angular
 
+> **Contributors and agents:** Before editing this package, read **[AGENTS.md](./AGENTS.md)** (scope, breaking-change policy, validation, upstream boundaries). User-facing API docs stay in this README.
+
 Angular bindings for CopilotKit core and AG-UI agents. This package provides services, directives, and utilities for building custom, headless Copilot UIs.
 
 ## Installation
