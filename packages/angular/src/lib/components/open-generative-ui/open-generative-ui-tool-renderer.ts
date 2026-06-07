@@ -7,7 +7,6 @@ import {
   inject,
   input,
   signal,
-  untracked,
 } from "@angular/core";
 import type { AngularToolCall, ToolRenderer } from "../../tools";
 import type { GenerateSandboxedUiArgs } from "../../open-generative-ui";
@@ -40,13 +39,10 @@ export class CopilotOpenGenerativeUIToolRenderer implements ToolRenderer<Generat
   readonly toolCall =
     input.required<AngularToolCall<GenerateSandboxedUiArgs>>();
 
-  private readonly rotationIndex = signal(0);
+  private readonly visibleMessageIndex = signal(0);
   private readonly destroyRef = inject(DestroyRef);
+  private previousMessageCount = 0;
   private interval: ReturnType<typeof setInterval> | undefined;
-
-  private readonly messageCount = computed(
-    () => this.toolCall().args.placeholderMessages?.length ?? 0,
-  );
 
   protected readonly visibleMessage = computed(() => {
     const call = this.toolCall();
@@ -55,27 +51,34 @@ export class CopilotOpenGenerativeUIToolRenderer implements ToolRenderer<Generat
     const messages = call.args.placeholderMessages;
     if (!messages?.length) return undefined;
 
-    const count = messages.length;
-    const index = this.rotationIndex() % count;
-    return messages[index] ?? messages[0];
+    return messages[this.visibleMessageIndex()] ?? messages[0];
   });
 
   constructor() {
     this.destroyRef.onDestroy(() => this.clearTimer());
 
     effect((onCleanup) => {
-      const count = this.messageCount();
-      const isComplete = this.toolCall().status === "complete";
+      const call = this.toolCall();
+      const messages = call.args.placeholderMessages;
+      this.clearTimer();
 
-      untracked(() => {
-        this.clearTimer();
-        this.rotationIndex.set(count > 0 ? count - 1 : 0);
-      });
+      if (!messages?.length) {
+        this.previousMessageCount = 0;
+        this.visibleMessageIndex.set(0);
+        return;
+      }
 
-      if (count === 0 || isComplete) return;
+      if (messages.length !== this.previousMessageCount) {
+        this.previousMessageCount = messages.length;
+        this.visibleMessageIndex.set(messages.length - 1);
+      }
+
+      if (call.status === "complete") return;
 
       this.interval = setInterval(() => {
-        this.rotationIndex.update((index) => (index + 1) % count);
+        this.visibleMessageIndex.update(
+          (index) => (index + 1) % messages.length,
+        );
       }, 5000);
 
       onCleanup(() => this.clearTimer());
