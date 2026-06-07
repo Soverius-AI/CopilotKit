@@ -6,7 +6,6 @@ import {
   signal,
   ViewEncapsulation,
 } from "@angular/core";
-import { CommonModule } from "@angular/common";
 import type {
   AttachmentModality,
   InputContentSource,
@@ -17,7 +16,6 @@ import { cn } from "../../utils";
 @Component({
   selector: "copilot-chat-attachment-renderer",
   standalone: true,
-  imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   host: { "data-copilotkit": "" },

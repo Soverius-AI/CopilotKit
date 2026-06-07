@@ -6,7 +6,6 @@ import {
   input,
   output,
 } from "@angular/core";
-import { CommonModule } from "@angular/common";
 import { cn } from "../../utils";
 
 const suggestionPillClass = cn(
@@ -24,7 +23,6 @@ const suggestionPillClass = cn(
 @Component({
   standalone: true,
   selector: "copilot-chat-suggestion-pill",
-  imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   host: { "data-copilotkit": "" },
