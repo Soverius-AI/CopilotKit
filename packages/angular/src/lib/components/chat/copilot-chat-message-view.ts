@@ -28,7 +28,6 @@ import type { RenderActivityMessageConfig } from "../../activity-renderer";
  */
 @Component({
   selector: "copilot-chat-message-view",
-  standalone: true,
   host: { "data-copilotkit": "" },
   imports: [
     NgTemplateOutlet,

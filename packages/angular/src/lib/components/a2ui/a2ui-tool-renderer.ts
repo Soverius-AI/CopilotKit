@@ -31,7 +31,6 @@ import {
 
 @Component({
   selector: "copilot-a2ui-tool-renderer",
-  standalone: true,
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

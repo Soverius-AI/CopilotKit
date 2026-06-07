@@ -15,7 +15,6 @@ import { formatReasoningDuration } from "./copilot-chat-reasoning-message-utils"
 
 @Component({
   selector: "copilot-chat-reasoning-message",
-  standalone: true,
   imports: [CopilotChatAssistantMessageRenderer],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

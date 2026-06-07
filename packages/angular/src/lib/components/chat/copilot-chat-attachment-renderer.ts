@@ -15,7 +15,6 @@ import { cn } from "../../utils";
 
 @Component({
   selector: "copilot-chat-attachment-renderer",
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   host: { "data-copilotkit": "" },

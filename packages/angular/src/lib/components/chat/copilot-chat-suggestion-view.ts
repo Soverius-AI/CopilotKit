@@ -16,7 +16,6 @@ const suggestionViewClass = cn(
 );
 
 @Component({
-  standalone: true,
   selector: "copilot-chat-suggestion-view",
   imports: [CopilotChatSuggestionPill],
   changeDetection: ChangeDetectionStrategy.OnPush,

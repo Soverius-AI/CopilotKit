@@ -25,7 +25,6 @@ import { A2UI_SURFACE_SCROLL_STYLES } from "./a2ui-shared-styles";
 
 @Component({
   selector: "copilot-a2ui-activity-renderer",
-  standalone: true,
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

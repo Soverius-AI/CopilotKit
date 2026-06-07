@@ -21,7 +21,6 @@ const suggestionPillClass = cn(
 );
 
 @Component({
-  standalone: true,
   selector: "copilot-chat-suggestion-pill",
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,

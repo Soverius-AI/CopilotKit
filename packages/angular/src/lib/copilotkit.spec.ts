@@ -101,7 +101,6 @@ describe("CopilotKit", () => {
 
   it("initialises core with transformed tool and renderer config", () => {
     @Component({
-      standalone: true,
       selector: "dummy-tool",
       template: "",
     })
