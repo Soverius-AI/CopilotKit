@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   input,
+  linkedSignal,
   signal,
 } from "@angular/core";
 import type { Message, ReasoningMessage } from "@ag-ui/core";
@@ -91,8 +92,20 @@ export class CopilotChatReasoningMessage {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly elapsed = signal(0);
-  private readonly userToggled = signal(false);
-  protected readonly open = signal(false);
+  private readonly userToggled = linkedSignal<boolean, boolean>({
+    source: () => this.isStreaming(),
+    computation: (streaming, previous) => {
+      if (streaming) return false;
+      return previous?.value ?? false;
+    },
+  });
+  private readonly manualOpen = signal(false);
+  protected readonly open = computed(() => {
+    if (!this.userToggled()) {
+      return this.isStreaming();
+    }
+    return this.manualOpen();
+  });
   private startTime: number | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
 
@@ -164,24 +177,15 @@ export class CopilotChatReasoningMessage {
 
       onCleanup(() => this.clearTimer());
     });
-
-    effect(() => {
-      if (this.isStreaming()) {
-        this.userToggled.set(false);
-        this.open.set(true);
-        return;
-      }
-
-      if (!this.userToggled()) {
-        this.open.set(false);
-      }
-    });
   }
 
   protected toggle(): void {
     if (!this.hasContent()) return;
+    // Capture the current computed `open()` value before mutating
+    // `userToggled`/`manualOpen`, otherwise the computed would read the updated state.
+    const wasOpen = this.open();
     this.userToggled.set(true);
-    this.open.update((value) => !value);
+    this.manualOpen.set(!wasOpen);
   }
 
   private clearTimer(): void {
