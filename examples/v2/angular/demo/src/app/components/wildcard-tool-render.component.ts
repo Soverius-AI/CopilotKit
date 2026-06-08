@@ -2,8 +2,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  effect,
   input,
+  linkedSignal,
   signal,
 } from "@angular/core";
 import { CommonModule } from "@angular/common";
@@ -244,8 +244,16 @@ export class WildcardToolRenderComponent implements ToolRenderer<WildcardToolArg
   protected readonly ChevronDownIcon = ChevronDown;
   protected readonly WrenchIcon = Wrench;
 
-  private readonly userToggled = signal(false);
-  protected readonly open = signal(false);
+  private readonly manualOpen = signal(false);
+  protected readonly open = computed(() => {
+    // While running: default to expanded, unless the user toggled during this run.
+    if (this.isRunning()) {
+      return this.userToggled() ? this.manualOpen() : true;
+    }
+
+    // After completion: default to collapsed, unless the user toggled previously.
+    return this.userToggled() ? this.manualOpen() : false;
+  });
 
   protected readonly isRunning = computed(
     () => this.toolCall().status !== "complete",
@@ -275,23 +283,19 @@ export class WildcardToolRenderComponent implements ToolRenderer<WildcardToolArg
     this.isRunning() ? "Running" : "Complete",
   );
 
-  constructor() {
-    effect(() => {
-      if (this.isRunning()) {
-        this.userToggled.set(false);
-        this.open.set(true);
-        return;
-      }
-
-      if (!this.userToggled()) {
-        this.open.set(false);
-      }
-    });
-  }
+  // Reset user override when a new run starts (signal-to-signal, no effect()).
+  private readonly userToggled = linkedSignal<boolean, boolean>({
+    source: () => this.isRunning(),
+    computation: (running, previous) => {
+      if (running) return false;
+      return previous?.value ?? false;
+    },
+  });
 
   protected toggle(): void {
     if (!this.hasDetails()) return;
+    const wasOpen = this.open();
     this.userToggled.set(true);
-    this.open.update((value) => !value);
+    this.manualOpen.set(!wasOpen);
   }
 }
