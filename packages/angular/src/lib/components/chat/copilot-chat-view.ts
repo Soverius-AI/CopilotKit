@@ -13,12 +13,12 @@ import {
   OnInit,
   OnChanges,
   OnDestroy,
-  AfterViewInit,
   input,
   output,
   inject,
+  PLATFORM_ID,
 } from "@angular/core";
-import { CommonModule } from "@angular/common";
+import { CommonModule, isPlatformBrowser } from "@angular/common";
 import { CopilotSlot } from "../../slots/copilot-slot";
 import { CopilotChatViewScrollView } from "./copilot-chat-view-scroll-view";
 import { CopilotChatViewScrollToBottomButton } from "./copilot-chat-view-scroll-to-bottom-button";
@@ -32,11 +32,13 @@ import { Message } from "@ag-ui/client";
 import { cn } from "../../utils";
 import { ResizeObserverService } from "../../resize-observer";
 import { CopilotChatViewHandlers } from "./copilot-chat-view-handlers";
-import { Subject } from "rxjs";
+import { Subject, Subscription } from "rxjs";
 import { takeUntil } from "rxjs/operators";
 import { ChatState } from "../../chat-state";
 import { LucideAngularModule, Upload } from "lucide-angular";
 import { injectChatLabels } from "../../chat-config";
+
+const MAX_MEASURE_ATTEMPTS = 10;
 
 /**
  * CopilotChatView component - Angular port of the React component.
@@ -205,9 +207,7 @@ import { injectChatLabels } from "../../chat-config";
     }
   `,
 })
-export class CopilotChatView
-  implements OnInit, OnChanges, AfterViewInit, OnDestroy
-{
+export class CopilotChatView implements OnInit, OnChanges, OnDestroy {
   // Core inputs matching React props
   protected readonly chatState = inject(ChatState, { optional: true });
   protected readonly UploadIcon = Upload;
@@ -278,8 +278,29 @@ export class CopilotChatView
   userMessageEdit = output<{ message: Message }>();
 
   // ViewChild references
+  // Setter-based query: the input container overlay only renders on the
+  // chat-view branch — the welcome-screen branch omits it — so a one-shot
+  // ngAfterViewInit measurement would find nothing when the chat starts on
+  // the welcome screen and never re-run after the user sends their first
+  // message, leaving inputContainerHeight at 0 and the last messages
+  // scrolling underneath the floating input. The setter fires whenever the
+  // branch mounts/unmounts (mirrors the element-as-state fix in the React
+  // CopilotChatView).
   @ViewChild("inputContainerSlotRef", { read: ElementRef })
-  inputContainerSlotRef?: ElementRef;
+  set inputContainerSlotRef(ref: ElementRef | undefined) {
+    if (ref?.nativeElement === this.inputContainerSlotEl?.nativeElement) {
+      return;
+    }
+    this.inputContainerSlotEl = ref;
+    this.stopInputContainerMeasurement();
+    if (ref && isPlatformBrowser(this.platformId)) {
+      this.startInputContainerMeasurement();
+    } else {
+      // Reset so a stale height doesn't survive a return to the welcome screen
+      this.inputContainerHeight.set(0);
+    }
+  }
+  private inputContainerSlotEl?: ElementRef;
 
   // Default components for slots
   protected readonly defaultScrollViewComponent = CopilotChatViewScrollView;
@@ -388,6 +409,11 @@ export class CopilotChatView
 
   private destroy$ = new Subject<void>();
   private resizeTimeoutRef?: number;
+  private measureRetryTimeout?: number;
+  private measureAttempts = 0;
+  private inputResizeSub?: Subscription;
+  private observedInputEl?: HTMLElement;
+  private platformId = inject(PLATFORM_ID);
 
   constructor(
     private resizeObserverService: ResizeObserverService,
@@ -418,111 +444,100 @@ export class CopilotChatView
     this.handlers.hasUserEditHandler.set(true);
   }
 
-  ngAfterViewInit(): void {
-    // Don't set a default height - measure it dynamically
+  private startInputContainerMeasurement(): void {
+    this.measureAttempts = 0;
+    // Defer the first attempt: the ViewChild setter fires during change
+    // detection, before the slot's dynamically created content exists.
+    this.scheduleMeasureAttempt(0);
+  }
 
-    // Set up input container height monitoring
-    const measureAndObserve = () => {
-      if (
-        !this.inputContainerSlotRef ||
-        !this.inputContainerSlotRef.nativeElement
-      ) {
-        return false;
-      }
-
-      // The slot ref points to the copilot-slot element
-      // We need to find the actual input container component inside it
-      const slotElement = this.inputContainerSlotRef.nativeElement;
-      const componentElement = slotElement.querySelector(
-        "copilot-chat-view-input-container",
-      );
-
-      if (!componentElement) {
-        return false;
-      }
-
-      // Look for the absolute positioned div that contains the input
-      let innerDiv = componentElement.querySelector(
-        "div.absolute",
-      ) as HTMLElement;
-
-      // If not found by class, try first child
-      if (!innerDiv) {
-        innerDiv = componentElement.firstElementChild as HTMLElement;
-      }
-
-      if (!innerDiv) {
-        return false;
-      }
-
-      // Measure the actual height
-      const measuredHeight = innerDiv.offsetHeight;
-
-      if (measuredHeight === 0) {
-        return false;
-      }
-
-      // Success! Set the initial height
-      this.inputContainerHeight.set(measuredHeight);
-      this.cdr.detectChanges();
-
-      // Create an ElementRef wrapper for ResizeObserver
-      const innerDivRef = new ElementRef(innerDiv);
-
-      // Set up ResizeObserver to track changes
-      this.resizeObserverService
-        .observeElement(innerDivRef, 0, 250)
-        .pipe(takeUntil(this.destroy$))
-        .subscribe((state) => {
-          const newHeight = state.height;
-
-          if (newHeight !== this.inputContainerHeight() && newHeight > 0) {
-            this.inputContainerHeight.set(newHeight);
-            this.isResizing.set(true);
-            this.cdr.detectChanges();
-
-            // Clear existing timeout
-            if (this.resizeTimeoutRef) {
-              clearTimeout(this.resizeTimeoutRef);
-            }
-
-            // Set isResizing to false after a short delay
-            this.resizeTimeoutRef = window.setTimeout(() => {
-              this.isResizing.set(false);
-              this.resizeTimeoutRef = undefined;
-              this.cdr.detectChanges();
-            }, 250);
-          }
-        });
-
-      return true;
-    };
-
-    // Try to measure immediately
-    if (!measureAndObserve()) {
-      // If failed, retry with increasing delays
-      let attempts = 0;
-      const maxAttempts = 10;
-
-      const retry = () => {
-        attempts++;
-        if (measureAndObserve()) {
-          // Successfully measured
-        } else if (attempts < maxAttempts) {
-          // Exponential backoff: 50ms, 100ms, 200ms, 400ms, etc.
-          const delay = 50 * Math.pow(2, Math.min(attempts - 1, 4));
-          setTimeout(retry, delay);
-        } else {
-          // Failed to measure after max attempts
-        }
-      };
-
-      // Start retry with first delay
-      setTimeout(retry, 50);
+  private stopInputContainerMeasurement(): void {
+    if (this.measureRetryTimeout !== undefined) {
+      clearTimeout(this.measureRetryTimeout);
+      this.measureRetryTimeout = undefined;
+    }
+    this.inputResizeSub?.unsubscribe();
+    this.inputResizeSub = undefined;
+    if (this.observedInputEl) {
+      this.resizeObserverService.unobserve(this.observedInputEl);
+      this.observedInputEl = undefined;
     }
   }
 
+  private scheduleMeasureAttempt(delay: number): void {
+    this.measureRetryTimeout = window.setTimeout(() => {
+      this.measureRetryTimeout = undefined;
+      if (this.measureAndObserve()) {
+        return;
+      }
+      this.measureAttempts++;
+      if (this.measureAttempts < MAX_MEASURE_ATTEMPTS) {
+        // Exponential backoff: 50ms, 100ms, 200ms, 400ms, then 800ms
+        this.scheduleMeasureAttempt(
+          50 * Math.pow(2, Math.min(this.measureAttempts - 1, 4)),
+        );
+      }
+    }, delay);
+  }
+
+  private measureAndObserve(): boolean {
+    // The slot ref points to the copilot-slot element; the actual input
+    // container component is rendered inside it
+    const slotElement = this.inputContainerSlotEl?.nativeElement as
+      | HTMLElement
+      | undefined;
+    const componentElement = slotElement?.querySelector(
+      "copilot-chat-view-input-container",
+    );
+
+    // The component's root is its absolutely positioned overlay wrapper
+    const innerDiv = componentElement?.firstElementChild as HTMLElement | null;
+
+    if (!innerDiv) {
+      return false;
+    }
+
+    const measuredHeight = innerDiv.offsetHeight;
+
+    if (measuredHeight === 0) {
+      return false;
+    }
+
+    this.inputContainerHeight.set(measuredHeight);
+    this.cdr.detectChanges();
+
+    // Set up ResizeObserver to track changes
+    this.observedInputEl = innerDiv;
+    this.inputResizeSub = this.resizeObserverService
+      .observeElement(new ElementRef(innerDiv), 0, 250)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((state) => {
+        const newHeight = state.height;
+
+        if (newHeight !== this.inputContainerHeight() && newHeight > 0) {
+          this.inputContainerHeight.set(newHeight);
+          this.isResizing.set(true);
+          this.cdr.detectChanges();
+
+          // Clear existing timeout
+          if (this.resizeTimeoutRef) {
+            clearTimeout(this.resizeTimeoutRef);
+          }
+
+          // Set isResizing to false after a short delay
+          this.resizeTimeoutRef = window.setTimeout(() => {
+            this.isResizing.set(false);
+            this.resizeTimeoutRef = undefined;
+            this.cdr.detectChanges();
+          }, 250);
+        }
+      });
+
+    return true;
+  }
+
   ngOnDestroy(): void {
+    this.stopInputContainerMeasurement();
     if (this.resizeTimeoutRef) {
       clearTimeout(this.resizeTimeoutRef);
     }
