@@ -14,12 +14,15 @@ const view = Modal({
 describe("ctx.openModal", () => {
   it("opens a modal from an interaction when a triggerId is present", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let res: unknown;
     channel.onInteraction("ck:open", async (ctx) => {
       res = await ctx.openModal!(view);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitInteraction({ id: "ck:open", triggerId: "T123" });
     await tick();
     expect(res).toEqual({ ok: true });
@@ -30,12 +33,15 @@ describe("ctx.openModal", () => {
 
   it("opens a modal from a command", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let res: unknown;
     channel.onCommand("triage", async (ctx) => {
       res = await ctx.openModal!(view);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     await fake.emitCommand({ command: "triage", triggerId: "T999" });
     expect(res).toEqual({ ok: true });
     expect(fake.openedModals[0]!.triggerId).toBe("T999");
@@ -43,12 +49,15 @@ describe("ctx.openModal", () => {
 
   it("omits openModal when no triggerId is present", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let hasOpen = true;
     channel.onInteraction("ck:noop", (ctx) => {
       hasOpen = typeof ctx.openModal === "function";
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitInteraction({ id: "ck:noop" });
     await tick();
     expect(hasOpen).toBe(false);
@@ -56,12 +65,15 @@ describe("ctx.openModal", () => {
 
   it("omits openModal when the adapter has no modal support", async () => {
     const fake = new FakeAdapter({ modals: false });
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let hasOpen = true;
     channel.onInteraction("ck:x", (ctx) => {
       hasOpen = typeof ctx.openModal === "function";
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitInteraction({ id: "ck:x", triggerId: "T1" });
     await tick();
     expect(hasOpen).toBe(false);

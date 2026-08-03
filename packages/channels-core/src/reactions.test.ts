@@ -10,12 +10,16 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 describe("channel.onReaction", () => {
   it("routes a specific reaction, normalizing the platform token", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      adapters: [fake],
+      identifyUser: ({ actor }) =>
+        actor.kind === "human" ? { id: actor.id, name: actor.id } : null,
+    });
     const seen: { emoji: string; raw: string; added: boolean }[] = [];
     channel.onReaction([emoji.thumbs_up], (evt) => {
       seen.push({ emoji: evt.emoji, raw: evt.rawEmoji, added: evt.added });
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     // FakeAdapter.platform === "fake": normalizeEmoji falls through, but engine
     // normalizes by adapter.platform. Use a Slack-style token via a fake whose
     // platform normalizes — here we assert passthrough + catch-all instead.
@@ -27,11 +31,16 @@ describe("channel.onReaction", () => {
 
   it("fires a catch-all for any reaction and reports added/removed", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      adapters: [fake],
+      identifyUser: ({ actor }) =>
+        actor.kind === "human" ? { id: actor.id, name: actor.id } : null,
+    });
     const seen: {
       raw: string;
       added: boolean;
       user?: string;
+      actor: string;
       messageId: string;
       platform: string;
     }[] = [];
@@ -40,25 +49,34 @@ describe("channel.onReaction", () => {
         raw: evt.rawEmoji,
         added: evt.added,
         user: evt.user?.id,
+        actor: evt.actor.id,
         messageId: evt.messageId,
         platform: evt.thread.platform,
       });
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitReaction({
       rawEmoji: "🎉",
       added: true,
-      user: { id: "U1" },
+      actor: { id: "U1", kind: "human" },
       messageId: "m9",
     });
     fake.emitReaction({ rawEmoji: "🎉", added: false, messageId: "m9" });
     await tick();
     expect(seen).toEqual([
-      { raw: "🎉", added: true, user: "U1", messageId: "m9", platform: "fake" },
+      {
+        raw: "🎉",
+        added: true,
+        user: "U1",
+        actor: "U1",
+        messageId: "m9",
+        platform: "fake",
+      },
       {
         raw: "🎉",
         added: false,
         user: undefined,
+        actor: "",
         messageId: "m9",
         platform: "fake",
       },
@@ -69,12 +87,15 @@ describe("channel.onReaction", () => {
     // A fake whose platform === "slack" so normalizeEmoji maps the shortcode.
     const fake = new FakeAdapter();
     Object.defineProperty(fake, "platform", { value: "slack" });
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const hits: string[] = [];
     channel.onReaction(["thumbs_up"], (evt) => {
       hits.push(evt.emoji);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitReaction({ rawEmoji: "thumbsup", added: true }); // Slack alias
     await tick();
     expect(hits).toEqual(["thumbs_up"]);
@@ -86,12 +107,15 @@ describe("channel.onReaction", () => {
     // its source provider. Core must normalize by that source platform, so a
     // Teams `<codepoint>_<name>` token resolves to its canonical name.
     const fake = new FakeAdapter({ platform: "intelligence" });
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const hits: string[] = [];
     channel.onReaction(["refresh"], (evt) => {
       hits.push(evt.emoji);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitReaction({
       rawEmoji: "1f504_refresh",
       added: true,
@@ -103,7 +127,10 @@ describe("channel.onReaction", () => {
 
   it("routes a reaction on a posted message to its <Message onReaction>", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const seen: { emoji: string; added: boolean }[] = [];
     channel.onMessage(async ({ thread }) => {
       await thread.post(
@@ -115,7 +142,7 @@ describe("channel.onReaction", () => {
         }),
       );
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitTurn({});
     await tick();
     // The handler is a closure, never serialized into the native payload.
@@ -132,7 +159,10 @@ describe("channel.onReaction", () => {
 
   it("resolves <Message onReaction> by postedMessageId when the reaction id differs (Channel path)", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const seen: string[] = [];
     channel.onMessage(async ({ thread }) => {
       await thread.post(
@@ -144,7 +174,7 @@ describe("channel.onReaction", () => {
         }),
       );
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitTurn({});
     await tick();
     // Channel delivery: the reaction arrives keyed by the provider ts (NOT the
@@ -175,6 +205,7 @@ describe("channel.onReaction", () => {
     // Bot 1 posts the component message, persisting a reaction snapshot.
     const fake1 = new FakeAdapter();
     const bot1 = createChannel({
+      identifyUser: "platform",
       adapters: [fake1],
       store: { adapter: backend },
       components: [Card],
@@ -184,7 +215,7 @@ describe("channel.onReaction", () => {
       // pre-rendered Message() node.
       await thread.post({ type: Card, props: {} });
     });
-    await bot1.start();
+    await bot1.ɵruntime.start();
     fake1.emitTurn({});
     await tick();
 
@@ -192,11 +223,12 @@ describe("channel.onReaction", () => {
     // Its reaction hot cache is empty, so it must resolve via the durable snapshot.
     const fake2 = new FakeAdapter();
     const bot2 = createChannel({
+      identifyUser: "platform",
       adapters: [fake2],
       store: { adapter: backend },
       components: [Card],
     });
-    await bot2.start();
+    await bot2.ɵruntime.start();
     fake2.emitReaction({ rawEmoji: "🎉", added: true, messageId: "msg-1" });
     await tick();
     expect(seen).toEqual(["🎉"]);
@@ -204,7 +236,10 @@ describe("channel.onReaction", () => {
 
   it("gives the handler a thread to post new UI and the reacted message's ref", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let seenRefId: string | undefined;
     channel.onMessage(async ({ thread }) => {
       await thread.post(
@@ -217,7 +252,7 @@ describe("channel.onReaction", () => {
         }),
       );
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitTurn({});
     await tick();
     const before = fake.posted.length;
@@ -231,7 +266,10 @@ describe("channel.onReaction", () => {
 
   it("does not fire a message handler for a reaction on a different message", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     let fired = false;
     channel.onMessage(async ({ thread }) => {
       await thread.post(
@@ -243,7 +281,7 @@ describe("channel.onReaction", () => {
         }),
       );
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitTurn({});
     await tick();
     fake.emitReaction({ rawEmoji: "🎉", added: true, messageId: "other" });
@@ -256,7 +294,10 @@ describe("channel.onReaction", () => {
     // Slack alias to the canonical "thumbs_up", so the filter must too.
     const fake = new FakeAdapter();
     Object.defineProperty(fake, "platform", { value: "slack" });
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const hits: string[] = [];
     channel.onReaction(["👍"], (evt) => {
       hits.push(evt.emoji);
@@ -264,7 +305,7 @@ describe("channel.onReaction", () => {
     channel.onReaction(["thumbsup"], (evt) => {
       hits.push(`alias:${evt.emoji}`);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     fake.emitReaction({ rawEmoji: "thumbsup", added: true }); // Slack alias
     await tick();
     expect(hits).toEqual(["thumbs_up", "alias:thumbs_up"]);

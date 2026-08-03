@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createChannel, FakeAdapter } from "@copilotkit/channels";
-import { startChannelsOverRealtimeGateway } from "@copilotkit/channels-intelligence";
 import { CopilotKitIntelligence } from "../../intelligence-platform";
+import { InMemoryAgentRunner } from "../../runner/in-memory";
 import {
   ChannelManager,
   ChannelSetupRequiredError,
@@ -13,6 +13,7 @@ import type {
   ChannelsHandle,
   ChannelsIntelligenceModule,
 } from "../channel-manager";
+import { deriveChannelActivationConfig } from "../channel-activation-config";
 import type { ChannelActivationConfig } from "../channel-activation-config";
 
 /** A CopilotKitIntelligence whose runner API key carries a parseable project id. */
@@ -24,9 +25,31 @@ function fakeIntelligence(): CopilotKitIntelligence {
   });
 }
 
+function fakeServices() {
+  return {
+    runner: new InMemoryAgentRunner(),
+    intelligence: fakeIntelligence(),
+  };
+}
+
 /** A minimal fake ChannelsHandle whose `stop` is a spy. */
 function fakeHandle(): ChannelsHandle & { stop: ReturnType<typeof vi.fn> } {
   return { metadata: {}, stop: vi.fn(async () => {}) };
+}
+
+class ManagedFakeAdapter extends FakeAdapter {
+  readonly __intelligenceChannel = true;
+}
+
+function captureChannelsIntelligenceLaunch() {
+  const handle = fakeHandle();
+  const start = vi.fn<
+    ChannelsIntelligenceModule["startChannelsOverRealtimeGateway"]
+  >(async () => handle);
+  const importer = async (): Promise<ChannelsIntelligenceModule> => ({
+    startChannelsOverRealtimeGateway: start,
+  });
+  return { handle, start, importer };
 }
 
 describe("ChannelSetupRequiredError", () => {
@@ -39,8 +62,8 @@ describe("ChannelSetupRequiredError", () => {
 
 describe("ChannelManager", () => {
   it("activate() starts one engine call per channel with distinct runtimeInstanceIds and reaches online after ready()", async () => {
-    const chA = createChannel({ name: "support" });
-    const chB = createChannel({ name: "sales" });
+    const chA = createChannel({ identifyUser: "platform", name: "support" });
+    const chB = createChannel({ identifyUser: "platform", name: "sales" });
     const seenIds: string[] = [];
     const engine: ActivateChannelEngine = vi.fn(async (config) => {
       seenIds.push(config.runtimeInstanceId);
@@ -72,7 +95,7 @@ describe("ChannelManager", () => {
     const engine: ActivateChannelEngine = vi.fn(async () => fakeHandle());
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
 
@@ -93,8 +116,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "sales" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "sales" }),
       ],
       activateChannel: engine,
     });
@@ -128,8 +151,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "sales" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "sales" }),
       ],
       activateChannel: engine,
     });
@@ -150,7 +173,7 @@ describe("ChannelManager", () => {
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -159,13 +182,71 @@ describe("ChannelManager", () => {
     expect(mgr.status().channels.support).toBe("setup_required");
   });
 
+  it("starts and stops direct adapters when managed setup is incomplete", async () => {
+    const direct = new FakeAdapter({ platform: "direct" });
+    const directStop = vi.spyOn(direct, "stop");
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+      adapters: [direct],
+    });
+    const engine: ActivateChannelEngine = async () => {
+      throw new ChannelSetupRequiredError("managed Teams is not installed");
+    };
+    const mgr = new ChannelManager({
+      intelligence: fakeIntelligence(),
+      channels: [channel],
+      activateChannel: engine,
+    });
+
+    await expect(mgr.ready()).resolves.toBeUndefined();
+    expect(direct.started).toBe(true);
+    expect(mgr.status().channels.support).toBe("setup_required");
+
+    await mgr.stop();
+    expect(directStop).toHaveBeenCalledOnce();
+    expect(mgr.status().overall).toBe("stopped");
+  });
+
+  it("keeps a stopped status when setup-required direct startup later rejects", async () => {
+    let rejectStart!: (error: Error) => void;
+    const startAttempt = new Promise<void>((_resolve, reject) => {
+      rejectStart = reject;
+    });
+    const direct = new FakeAdapter({ platform: "direct" });
+    const start = vi.spyOn(direct, "start").mockReturnValue(startAttempt);
+    const stop = vi.spyOn(direct, "stop");
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+      adapters: [direct],
+    });
+    const mgr = new ChannelManager({
+      intelligence: fakeIntelligence(),
+      channels: [channel],
+      activateChannel: async () => {
+        throw new ChannelSetupRequiredError("managed Teams is not installed");
+      },
+    });
+
+    mgr.activate();
+    await vi.waitFor(() => expect(start).toHaveBeenCalledOnce());
+    await mgr.stop();
+    rejectStart(new Error("direct start failed after shutdown"));
+
+    await expect(mgr.ready()).resolves.toBeUndefined();
+    expect(stop).toHaveBeenCalledOnce();
+    expect(mgr.status().channels.support).toBe("stopped");
+    expect(mgr.status().overall).toBe("stopped");
+  });
+
   it("marks a plain error rejection as error and rejects ready()", async () => {
     const engine: ActivateChannelEngine = async () => {
       throw new Error("boom");
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -185,7 +266,7 @@ describe("ChannelManager", () => {
   it("status() reports overall 'stopped' when stop() runs before activate() (SIGTERM during startup)", async () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: async () => fakeHandle(),
     });
     // stop() before activate() — no entries were ever created, so the empty-set
@@ -200,7 +281,7 @@ describe("ChannelManager", () => {
       new Promise<ChannelsHandle>(() => {});
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -218,8 +299,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "sales" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "sales" }),
       ],
       activateChannel: engine,
     });
@@ -246,8 +327,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "support" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
       ],
       activateChannel: engine,
     });
@@ -267,7 +348,7 @@ describe("ChannelManager", () => {
     );
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -298,7 +379,7 @@ describe("ChannelManager", () => {
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: async () => wedged,
       stopHandleTimeoutMs: 20,
       log: (...args) => logs.push(args),
@@ -343,8 +424,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "sales" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "sales" }),
       ],
       activateChannel: engine,
     });
@@ -368,7 +449,7 @@ describe("ChannelManager", () => {
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -388,7 +469,7 @@ describe("ChannelManager", () => {
     );
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -428,7 +509,7 @@ describe("ChannelManager", () => {
     const engine: ActivateChannelEngine = vi.fn(async () => handle);
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -462,7 +543,7 @@ describe("ChannelManager", () => {
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
     mgr.activate();
@@ -483,7 +564,7 @@ describe("ChannelManager", () => {
     };
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
       log,
     });
@@ -510,7 +591,7 @@ describe("ChannelManager", () => {
     const engine: ActivateChannelEngine = async () => syncThrowHandle;
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
       log,
     });
@@ -533,7 +614,7 @@ describe("ChannelManager", () => {
     const engine: ActivateChannelEngine = vi.fn(async () => fakeHandle());
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
+      channels: [createChannel({ identifyUser: "platform", name: "support" })],
       activateChannel: engine,
     });
 
@@ -548,8 +629,8 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
-        createChannel({ name: "support" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
       ],
       activateChannel: engine,
     });
@@ -571,96 +652,117 @@ describe("ChannelManager", () => {
     expect(engine).not.toHaveBeenCalled();
   });
 
-  it("skips managed activation for a direct-adapter channel but records it unmanaged; the managed one reflects its real state", async () => {
-    const log = vi.fn();
-    const engine: ActivateChannelEngine = vi.fn(async () => fakeHandle());
-    const managed = createChannel({ name: "support" });
-    const direct = createChannel({
+  it("activates a Channel carrying a direct adapter through the managed engine so both coexist", async () => {
+    const direct = new FakeAdapter({ platform: "direct" });
+    const managed = new ManagedFakeAdapter({ platform: "intelligence" });
+    const directStop = vi.spyOn(direct, "stop");
+    const managedStop = vi.spyOn(managed, "stop");
+    const channel = createChannel({
+      identifyUser: "platform",
       name: "sales",
-      adapters: [new FakeAdapter({ platform: "slack" })],
+      adapters: [direct],
+    });
+    const engine: ActivateChannelEngine = vi.fn(async (_config, candidate) => {
+      candidate.ɵruntime.addAdapter(managed);
+      await candidate.ɵruntime.start();
+      return {
+        metadata: {},
+        stop: () => candidate.ɵruntime.stop(),
+      };
     });
 
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
-      channels: [managed, direct],
+      channels: [channel],
       activateChannel: engine,
-      log,
     });
-    mgr.activate();
 
+    await expect(mgr.ready()).resolves.toBeUndefined();
     expect(engine).toHaveBeenCalledTimes(1);
+    expect(direct.started).toBe(true);
+    expect(managed.started).toBe(true);
+    expect(mgr.status().channels).toEqual({ sales: "online" });
 
-    await expect(mgr.ready()).resolves.toBeUndefined();
-    // The direct channel is surfaced as `unmanaged` (never omitted, never
-    // `online`); the managed channel reflects its real activated state; and
-    // `overall` folds over the managed channel only, so a healthy managed
-    // channel beside an unmanaged one still reads `online`.
-    expect(mgr.status().channels).toEqual({
-      support: "online",
-      sales: "unmanaged",
-    });
-    expect(mgr.status().overall).toBe("online");
-
-    const breadcrumbs = log.mock.calls.map(([msg]) => msg);
-    expect(
-      breadcrumbs.some(
-        (msg) =>
-          typeof msg === "string" &&
-          msg.includes("sales") &&
-          msg.includes("direct adapter") &&
-          msg.includes("unmanaged"),
-      ),
-    ).toBe(true);
-  });
-
-  it("reports a lone direct-adapter channel as unmanaged (not online), keeps it in status, and ready() still resolves", async () => {
-    const engine: ActivateChannelEngine = vi.fn(async () => fakeHandle());
-    const direct = createChannel({
-      name: "sales",
-      adapters: [new FakeAdapter({ platform: "slack" })],
-    });
-
-    const mgr = new ChannelManager({
-      intelligence: fakeIntelligence(),
-      channels: [direct],
-      activateChannel: engine,
-    });
-    mgr.activate();
-
-    expect(engine).not.toHaveBeenCalled();
-    // A runtime whose only channel is direct must NOT read healthy: overall is
-    // `unmanaged`, and the channel is present in status (never an empty map).
-    expect(mgr.status().overall).toBe("unmanaged");
-    expect(mgr.status().channels).toEqual({ sales: "unmanaged" });
-    // ready() may resolve (nothing on the managed path to wait for) but that
-    // resolution implies no health — the truthfulness lives in status().
-    await expect(mgr.ready()).resolves.toBeUndefined();
-  });
-
-  it("leaves an unmanaged channel unmanaged through stop() — the manager never owned its lifecycle", async () => {
-    const engine: ActivateChannelEngine = vi.fn(async () => fakeHandle());
-    const managed = createChannel({ name: "support" });
-    const direct = createChannel({
-      name: "sales",
-      adapters: [new FakeAdapter({ platform: "slack" })],
-    });
-
-    const mgr = new ChannelManager({
-      intelligence: fakeIntelligence(),
-      channels: [managed, direct],
-      activateChannel: engine,
-    });
-    await mgr.ready();
     await mgr.stop();
-
-    // The managed channel is torn down to `stopped`; the direct one stays
-    // `unmanaged` (the manager cannot stop what it never started), so overall
-    // folds to `stopped` over the managed channel.
-    expect(mgr.status().channels).toEqual({
-      support: "stopped",
-      sales: "unmanaged",
-    });
+    expect(directStop).toHaveBeenCalledTimes(1);
+    expect(managedStop).toHaveBeenCalledTimes(1);
     expect(mgr.status().overall).toBe("stopped");
+  });
+
+  it("keeps managed activation online when a coexisting direct adapter fails to start", async () => {
+    const direct = new FakeAdapter({ platform: "direct", failStart: true });
+    const managed = new ManagedFakeAdapter({ platform: "intelligence" });
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "sales",
+      adapters: [direct],
+    });
+    const engine: ActivateChannelEngine = vi.fn(async (_config, candidate) => {
+      candidate.ɵruntime.addAdapter(managed);
+      await candidate.ɵruntime.start();
+      return {
+        metadata: {},
+        stop: () => candidate.ɵruntime.stop(),
+      };
+    });
+
+    const mgr = new ChannelManager({
+      intelligence: fakeIntelligence(),
+      channels: [channel],
+      activateChannel: engine,
+    });
+
+    await expect(mgr.ready()).resolves.toBeUndefined();
+    expect(direct.started).toBe(false);
+    expect(managed.started).toBe(true);
+    expect(mgr.status().channels).toEqual({ sales: "online" });
+    await mgr.stop();
+  });
+
+  it("reports error when managed startup fails despite a healthy direct adapter", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const direct = new FakeAdapter({ platform: "direct" });
+      const directStop = vi.spyOn(direct, "stop");
+      const managed = new ManagedFakeAdapter({
+        platform: "intelligence",
+        failStart: true,
+      });
+      const channel = createChannel({
+        identifyUser: "platform",
+        name: "sales",
+        adapters: [direct],
+      });
+      const engine: ActivateChannelEngine = vi.fn(
+        async (_config, candidate) => {
+          candidate.ɵruntime.addAdapter(managed);
+          await candidate.ɵruntime.start();
+          return {
+            metadata: {},
+            stop: () => candidate.ɵruntime.stop(),
+          };
+        },
+      );
+
+      const mgr = new ChannelManager({
+        intelligence: fakeIntelligence(),
+        channels: [channel],
+        activateChannel: engine,
+      });
+
+      const error = await mgr.ready().catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors[0]).toMatchObject({
+        message:
+          'channel "sales" failed to start its managed Intelligence adapter',
+      });
+      expect(direct.started).toBe(true);
+      expect(directStop).toHaveBeenCalledTimes(1);
+      expect(mgr.status().channels).toEqual({ sales: "error" });
+      await mgr.stop();
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 
   it("still enforces unique names across all declared channels, including direct ones", () => {
@@ -668,8 +770,9 @@ describe("ChannelManager", () => {
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support" }),
+        createChannel({ identifyUser: "platform", name: "support" }),
         createChannel({
+          identifyUser: "platform",
           name: "support",
           adapters: [new FakeAdapter({ platform: "slack" })],
         }),
@@ -681,45 +784,31 @@ describe("ChannelManager", () => {
     expect(engine).not.toHaveBeenCalled();
   });
 
-  it("declares each Channel's own provider — two Channels with different providers are not collapsed to one global (OSS-473)", async () => {
-    // The provider is per-Channel, not a manager-wide default: a Slack-backed
-    // Channel and a Teams-backed Channel activated by the same manager must each
-    // declare their own adapter to the gateway.
-    const seen = new Map<string, string>();
+  it("activates each Channel with a provider-neutral config", async () => {
+    const seen = new Map<string, ChannelActivationConfig>();
     const engine: ActivateChannelEngine = vi.fn(async (config) => {
-      seen.set(config.channelName, config.adapter);
+      seen.set(config.channelName, config);
       return fakeHandle();
     });
     const mgr = new ChannelManager({
       intelligence: fakeIntelligence(),
       channels: [
-        createChannel({ name: "support", provider: "slack" }),
-        createChannel({ name: "sales", provider: "teams" }),
+        createChannel({
+          identifyUser: "platform",
+          name: "support",
+        }),
+        createChannel({
+          identifyUser: "platform",
+          name: "sales",
+        }),
       ],
       activateChannel: engine,
     });
     mgr.activate();
     await mgr.ready();
 
-    expect(seen.get("support")).toBe("slack");
-    expect(seen.get("sales")).toBe("teams");
-  });
-
-  it("defaults a Channel with no provider to the documented 'slack' adapter", async () => {
-    let seenAdapter: string | undefined;
-    const engine: ActivateChannelEngine = vi.fn(async (config) => {
-      seenAdapter = config.adapter;
-      return fakeHandle();
-    });
-    const mgr = new ChannelManager({
-      intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
-      activateChannel: engine,
-    });
-    mgr.activate();
-    await mgr.ready();
-
-    expect(seenAdapter).toBe("slack");
+    expect(seen.get("support")).not.toHaveProperty("adapter");
+    expect(seen.get("sales")).not.toHaveProperty("adapter");
   });
 });
 
@@ -730,21 +819,23 @@ describe("defaultActivateChannel", () => {
     apiKey: "cpk-42_short_long",
     projectId: 42,
     channelName: "support",
-    adapter: "slack",
     runtimeInstanceId: "rti_x",
   };
 
   it("maps config to launcher opts and returns the launcher's handle", async () => {
-    const handle: ChannelsHandle = { metadata: {}, stop: async () => {} };
-    const start = vi.fn<
-      ChannelsIntelligenceModule["startChannelsOverRealtimeGateway"]
-    >(async () => handle);
-    const channel = createChannel({ name: "support" });
-    const importer = async (): Promise<ChannelsIntelligenceModule> => ({
-      startChannelsOverRealtimeGateway: start,
+    const { handle, start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
     });
 
-    const result = await defaultActivateChannel(config, channel, importer);
+    const result = await defaultActivateChannel(
+      config,
+      channel,
+      importer,
+      undefined,
+      fakeServices(),
+    );
 
     expect(result).toBe(handle);
     expect(start).toHaveBeenCalledTimes(1);
@@ -755,7 +846,8 @@ describe("defaultActivateChannel", () => {
       apiKey: "cpk-42_short_long",
       scope: { projectId: 42, channelName: "support" },
       runtimeInstanceId: "rti_x",
-      adapter: "slack",
+      runCanonical: expect.any(Function),
+      loadHistory: expect.any(Function),
       // The app-api HTTP base URL must reach the launcher so the transport wires
       // file/history on the NORMAL managed path (OSS-476) — not only manual
       // low-level callers.
@@ -766,25 +858,223 @@ describe("defaultActivateChannel", () => {
     expect(opts.scope).not.toHaveProperty("channelId");
   });
 
+  it("hydrates managed inbound and activity assets at the Runtime boundary", async () => {
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const services = fakeServices();
+    vi.spyOn(services.intelligence, "getThreadMessages").mockResolvedValue({
+      messages: [
+        {
+          id: "user-image",
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "url",
+                value: "cpki-asset://fileref_inbound",
+                mimeType: "image/png",
+              },
+            },
+          ],
+        },
+        {
+          id: "activity-image",
+          role: "activity",
+          activityType: "copilotkit.managed-asset",
+          content: {
+            assetId: "fileref_outbound",
+            filename: "chart.png",
+            mimeType: "image/png",
+            byteSize: 8,
+          },
+        },
+      ],
+    });
+    vi.spyOn(
+      services.intelligence,
+      "ɵgetManagedChannelAsset",
+    ).mockResolvedValue({
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      mimeType: "image/png",
+    });
+
+    await defaultActivateChannel(
+      config,
+      createChannel({ identifyUser: "platform", name: "support" }),
+      importer,
+      undefined,
+      services,
+    );
+    const loadHistory = start.mock.calls[0]![1].loadHistory;
+    const history = await loadHistory({
+      threadId: "thread-images",
+      appUserId: "app-user",
+      deliveryId: "dlv_images",
+    });
+
+    expect(services.intelligence.getThreadMessages).toHaveBeenCalledWith({
+      threadId: "thread-images",
+      userId: "app-user",
+      channelDeliveryId: "dlv_images",
+    });
+
+    expect(history[0]?.content).toEqual([
+      {
+        type: "image",
+        source: {
+          type: "data",
+          value: "iVBORw==",
+          mimeType: "image/png",
+        },
+      },
+    ]);
+    expect(history[1]).toMatchObject({
+      role: "activity",
+      activityType: "copilotkit.managed-asset",
+      content: {
+        assetId: "fileref_outbound",
+        source: {
+          type: "data",
+          value: "iVBORw==",
+          mimeType: "image/png",
+        },
+      },
+    });
+  });
+
+  it("keeps tool status omitted when createChannel() does not configure it", async () => {
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+    });
+    const activationConfig = deriveChannelActivationConfig({
+      intelligence: fakeIntelligence(),
+      channel,
+      runtimeInstanceId: "rti_x",
+    });
+
+    await defaultActivateChannel(
+      activationConfig,
+      channel,
+      importer,
+      undefined,
+      fakeServices(),
+    );
+
+    expect(activationConfig).not.toHaveProperty("showToolStatus");
+    const [, opts] = start.mock.calls[0]!;
+    expect(opts).not.toHaveProperty("showToolStatus");
+  });
+
+  it("forwards createChannel({ showToolStatus: true }) to the managed launcher", async () => {
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+      showToolStatus: true,
+    });
+    const activationConfig = deriveChannelActivationConfig({
+      intelligence: fakeIntelligence(),
+      channel,
+      runtimeInstanceId: "rti_x",
+    });
+
+    await defaultActivateChannel(
+      activationConfig,
+      channel,
+      importer,
+      undefined,
+      fakeServices(),
+    );
+
+    expect(activationConfig.showToolStatus).toBe(true);
+    const [, opts] = start.mock.calls[0]!;
+    expect(opts.showToolStatus).toBe(true);
+  });
+
+  it("forwards createChannel({ replyContinuation }) to the managed launcher", async () => {
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+      replyContinuation: { maxMessages: 5, truncationMarker: "…cut" },
+    });
+    const activationConfig = deriveChannelActivationConfig({
+      intelligence: fakeIntelligence(),
+      channel,
+      runtimeInstanceId: "rti_x",
+    });
+
+    await defaultActivateChannel(
+      activationConfig,
+      channel,
+      importer,
+      undefined,
+      fakeServices(),
+    );
+
+    expect(activationConfig.replyContinuation).toEqual({
+      maxMessages: 5,
+      truncationMarker: "…cut",
+    });
+    const [, opts] = start.mock.calls[0]!;
+    expect(opts.replyContinuation).toEqual({
+      maxMessages: 5,
+      truncationMarker: "…cut",
+    });
+  });
+
+  it("omits replyContinuation when createChannel does not set it", async () => {
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+    });
+    const activationConfig = deriveChannelActivationConfig({
+      intelligence: fakeIntelligence(),
+      channel,
+      runtimeInstanceId: "rti_x",
+    });
+
+    await defaultActivateChannel(
+      activationConfig,
+      channel,
+      importer,
+      undefined,
+      fakeServices(),
+    );
+
+    expect(activationConfig).not.toHaveProperty("replyContinuation");
+    const [, opts] = start.mock.calls[0]!;
+    expect(opts).not.toHaveProperty("replyContinuation");
+  });
+
   it("forwards the log sink to the launcher opts so transport-level drops surface", async () => {
-    const handle: ChannelsHandle = { metadata: {}, stop: async () => {} };
-    const start = vi.fn<
-      ChannelsIntelligenceModule["startChannelsOverRealtimeGateway"]
-    >(async () => handle);
-    const channel = createChannel({ name: "support" });
-    const importer = async (): Promise<ChannelsIntelligenceModule> => ({
-      startChannelsOverRealtimeGateway: start,
+    const { start, importer } = captureChannelsIntelligenceLaunch();
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
     });
     const log = vi.fn();
 
-    await defaultActivateChannel(config, channel, importer, log);
+    await defaultActivateChannel(
+      config,
+      channel,
+      importer,
+      log,
+      fakeServices(),
+    );
 
     const [, opts] = start.mock.calls[0]!;
     expect(opts.log).toBe(log);
   });
 
   it("throws a friendly install hint when the module is not found", async () => {
-    const channel = createChannel({ name: "support" });
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+    });
     const importer = async (): Promise<ChannelsIntelligenceModule> => {
       throw Object.assign(new Error("not found"), {
         code: "ERR_MODULE_NOT_FOUND",
@@ -799,7 +1089,10 @@ describe("defaultActivateChannel", () => {
   });
 
   it("rethrows a generic import failure unchanged", async () => {
-    const channel = createChannel({ name: "support" });
+    const channel = createChannel({
+      identifyUser: "platform",
+      name: "support",
+    });
     const importer = async (): Promise<ChannelsIntelligenceModule> => {
       throw new Error("boom");
     };
@@ -807,99 +1100,6 @@ describe("defaultActivateChannel", () => {
     await expect(
       defaultActivateChannel(config, channel, importer),
     ).rejects.toThrow(/^boom$/);
-  });
-});
-
-/**
- * A gateway-compatible fake WebSocket (phoenix v2 serializer) that rejects the
- * channel join with the gateway's setup-required reason
- * `channel_declaration_unavailable`. Records `close()` so teardown can be
- * asserted. This drives the REAL engine end-to-end: `defaultActivateChannel` →
- * real `startChannelsOverRealtimeGateway` → real `connectRealtimeGateway`.
- */
-function makeSetupRequiredWebSocket() {
-  const instances: FakeWebSocket[] = [];
-  class FakeWebSocket {
-    static readonly CONNECTING = 0;
-    static readonly OPEN = 1;
-    static readonly CLOSING = 2;
-    static readonly CLOSED = 3;
-    readyState = 0;
-    onopen: ((ev?: unknown) => void) | null = null;
-    onmessage: ((ev: { data: string }) => void) | null = null;
-    onerror: ((ev?: unknown) => void) | null = null;
-    onclose: ((ev?: unknown) => void) | null = null;
-    closed = false;
-    constructor(public readonly url: string) {
-      instances.push(this);
-      queueMicrotask(() => {
-        this.readyState = 1;
-        this.onopen?.();
-      });
-    }
-    send(data: string): void {
-      let frame: unknown;
-      try {
-        frame = JSON.parse(data);
-      } catch {
-        return;
-      }
-      if (!Array.isArray(frame)) return;
-      const [joinRef, ref, topic, event] = frame as [
-        string,
-        string,
-        string,
-        string,
-      ];
-      if (event !== "phx_join") return;
-      const reply = JSON.stringify([
-        joinRef,
-        ref,
-        topic,
-        "phx_reply",
-        {
-          status: "error",
-          response: { reason: "channel_declaration_unavailable" },
-        },
-      ]);
-      queueMicrotask(() => this.onmessage?.({ data: reply }));
-    }
-    close(): void {
-      this.closed = true;
-      this.readyState = 3;
-      this.onclose?.();
-    }
-  }
-  return { FakeWebSocket, instances };
-}
-
-describe("ChannelManager — reachable setup_required over the REAL engine (OSS-473)", () => {
-  it("degrades an unconfigured provider to setup_required (not error) and ready() resolves", async () => {
-    const { FakeWebSocket } = makeSetupRequiredWebSocket();
-    // Drive the REAL defaultActivateChannel → real startChannelsOverRealtimeGateway
-    // → real connectRealtimeGateway; the only injected seam is the fake
-    // WebSocket (an explicit launcher option), so the setup-required
-    // translation is exercised on the production path, not a stubbed engine.
-    const importer = async (): Promise<ChannelsIntelligenceModule> => ({
-      startChannelsOverRealtimeGateway: (channels, opts) =>
-        startChannelsOverRealtimeGateway(channels, {
-          ...opts,
-          webSocket: FakeWebSocket,
-        }),
-    });
-    const engine: ActivateChannelEngine = (config, channel) =>
-      defaultActivateChannel(config, channel, importer);
-
-    const mgr = new ChannelManager({
-      intelligence: fakeIntelligence(),
-      channels: [createChannel({ name: "support" })],
-      activateChannel: engine,
-    });
-    mgr.activate();
-
-    await expect(mgr.ready()).resolves.toBeUndefined();
-    expect(mgr.status().channels.support).toBe("setup_required");
-    expect(mgr.status().overall).toBe("setup_required");
   });
 });
 

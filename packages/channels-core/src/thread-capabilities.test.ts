@@ -5,20 +5,31 @@ import { FakeAdapter } from "./testing/fake-adapter.js";
 describe("onThreadStarted routing", () => {
   it("invokes registered handlers with the thread and user", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
-    const seen: { user?: string; platform: string }[] = [];
-    channel.onThreadStarted(({ thread, user }) => {
-      seen.push({ user: user?.id, platform: thread.platform });
+    const channel = createChannel({
+      adapters: [fake],
+      identifyUser: ({ actor }) => ({
+        id: actor.id,
+        name: actor.name ?? actor.id,
+      }),
     });
-    await channel.start();
+    const seen: { user?: string; actor: string; platform: string }[] = [];
+    channel.onThreadStarted(({ thread, user, actor }) => {
+      seen.push({ user: user?.id, actor: actor.id, platform: thread.platform });
+    });
+    await channel.ɵruntime.start();
 
-    await fake.emitThreadStarted({ user: { id: "U1", name: "Ada" } });
-    expect(seen).toEqual([{ user: "U1", platform: "fake" }]);
+    await fake.emitThreadStarted({
+      actor: { id: "U1", kind: "human", name: "Ada" },
+    });
+    expect(seen).toEqual([{ user: "U1", actor: "U1", platform: "fake" }]);
   });
 
   it("invokes every registered handler in order", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const order: number[] = [];
     channel.onThreadStarted(() => {
       order.push(1);
@@ -26,15 +37,18 @@ describe("onThreadStarted routing", () => {
     channel.onThreadStarted(() => {
       order.push(2);
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     await fake.emitThreadStarted();
     expect(order).toEqual([1, 2]);
   });
 
   it("is a no-op when no handler is registered", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
-    await channel.start();
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
+    await channel.ɵruntime.start();
     // Should not throw.
     await expect(
       Promise.resolve(fake.emitThreadStarted()),
@@ -45,7 +59,10 @@ describe("onThreadStarted routing", () => {
 describe("Thread.setSuggestedPrompts / setTitle capability gating", () => {
   it("delegates to the adapter when supported", async () => {
     const fake = new FakeAdapter();
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const results: { ok: boolean; error?: string }[] = [];
     channel.onThreadStarted(async ({ thread }) => {
       results.push(
@@ -56,7 +73,7 @@ describe("Thread.setSuggestedPrompts / setTitle capability gating", () => {
       );
       results.push(await thread.setTitle("My conversation"));
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     await fake.emitThreadStarted({ replyTarget: { channel: "D1" } });
 
     expect(results).toEqual([{ ok: true }, { ok: true }]);
@@ -73,13 +90,16 @@ describe("Thread.setSuggestedPrompts / setTitle capability gating", () => {
 
   it("returns { ok: false } without throwing when unsupported", async () => {
     const fake = new FakeAdapter({ paneMethods: false });
-    const channel = createChannel({ adapters: [fake] });
+    const channel = createChannel({
+      identifyUser: "platform",
+      adapters: [fake],
+    });
     const results: { ok: boolean; error?: string }[] = [];
     channel.onThreadStarted(async ({ thread }) => {
       results.push(await thread.setSuggestedPrompts([]));
       results.push(await thread.setTitle("nope"));
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     await fake.emitThreadStarted();
 
     expect(results[0]!.ok).toBe(false);

@@ -26,6 +26,7 @@ describe("createChannel telemetry wiring", () => {
     // telemetry) is resolved there, not at construction, so an adapter attached
     // via addAdapter can still provide the persistence backend.
     const channel = createChannel({
+      identifyUser: "platform",
       adapters: [new FakeAdapter()],
       components: [
         function Card() {
@@ -33,7 +34,7 @@ describe("createChannel telemetry wiring", () => {
         },
       ],
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     const call = capture.mock.calls.find(
       (c) => c[0] === "oss.channel.configured",
     );
@@ -45,8 +46,8 @@ describe("createChannel telemetry wiring", () => {
 
   it("emits oss.channel.started on start, start_failed (category only) on a throwing adapter", async () => {
     const ok = new FakeAdapter();
-    const channel = createChannel({ adapters: [ok] });
-    await channel.start();
+    const channel = createChannel({ identifyUser: "platform", adapters: [ok] });
+    await channel.ɵruntime.start();
     expect(
       capture.mock.calls.find((c) => c[0] === "oss.channel.started")?.[1]
         .startedCount,
@@ -58,8 +59,11 @@ describe("createChannel telemetry wiring", () => {
       Promise.reject(
         Object.assign(new Error("xoxb-SECRET token bad"), { code: "EAUTH" }),
       );
-    const bot2 = createChannel({ adapters: [bad] });
-    await bot2.start();
+    const bot2 = createChannel({ identifyUser: "platform", adapters: [bad] });
+    // All adapters failed → start() rejects (the channel is dead; the runtime
+    // reports status "error"). The start_failed telemetry is still captured
+    // before the throw.
+    await expect(bot2.ɵruntime.start()).rejects.toThrow(/failed to start/i);
     const f = capture.mock.calls.find(
       (c) => c[0] === "oss.channel.start_failed",
     );
@@ -71,13 +75,14 @@ describe("createChannel telemetry wiring", () => {
   it("emits oss.channel.agent_run on a successful run", async () => {
     const fake = new FakeAdapter();
     const channel = createChannel({
+      identifyUser: "platform",
       adapters: [fake],
       agent: () => new FakeAgent(),
     });
     channel.onMention(async ({ thread }) => {
       await thread.runAgent();
     });
-    await channel.start();
+    await channel.ɵruntime.start();
     capture.mockClear();
     fake.emitTurn({ userText: "hi", conversationKey: "c1" });
     await tick();

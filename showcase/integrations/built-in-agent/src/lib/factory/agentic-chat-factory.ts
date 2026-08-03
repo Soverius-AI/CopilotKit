@@ -5,6 +5,7 @@ import { openaiText } from "@tanstack/ai-openai";
 // x-aimock-context) onto every outbound OpenAI call, so aimock can match
 // fixtures by integration context. See ../header-forwarding.ts.
 import { forwardingFetch } from "../header-forwarding";
+import { DEMO_AGENT_LOOP_STRATEGY } from "./demo-stream";
 
 /**
  * System prompt for the `agentic_chat` named agent.
@@ -28,11 +29,12 @@ export function createAgenticChatAgent() {
     factory: ({ input, abortController }) => {
       const { messages, systemPrompts } = convertInputToTanStackAI(input);
       return chat({
-        adapter: openaiText("gpt-5.5", { fetch: forwardingFetch }),
+        adapter: openaiText("gpt-5.4", { fetch: forwardingFetch }),
         messages,
         systemPrompts: [AGENTIC_CHAT_SYSTEM_PROMPT, ...systemPrompts],
         tools: [],
         abortController,
+        agentLoopStrategy: DEMO_AGENT_LOOP_STRATEGY,
       });
     },
   });

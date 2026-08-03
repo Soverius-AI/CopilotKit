@@ -8,6 +8,26 @@ streaming, opaque-id interactions, and HITL.
 You write your UI as JSX once (`@copilotkit/channels-ui`) and drive the bot with
 `@copilotkit/channels`; this package is the only one that talks to Slack.
 
+The adapter keeps its own Slack credentials (`botToken` / `appToken`) — but the
+Channel itself only runs inside a CopilotKit Intelligence-configured
+`CopilotRuntime` (an API key; a free tier is available). There is no
+standalone / DIY runner and no `channel.start()`; the runtime starts and owns
+the channel because Intelligence is configured.
+
+## Managed Channels: the alternative to holding your own credentials
+
+This adapter is the **self-hosted** path: your process holds the Slack credentials, runs the Slack ingress, and talks to Slack directly.
+
+**Managed Intelligence Channels** is the alternative. Intelligence owns the provider edge — signed ingress, egress, and encrypted credential storage — so your process holds no Slack credentials and exposes no public Slack endpoint. You also get durable threads, the Channels dashboard with per-Channel health and transcripts, and guided provider setup from either the browser wizard or the CLI:
+
+```bash
+npx copilotkit channels add support
+```
+
+Your bot code is otherwise identical — the agent, tools, context, commands, and turn handlers do not change. Only the transport does. See `examples/slack/app/managed.ts` for the same bot wired both ways, and the **copilotkit-channels** skill for the runtime wiring.
+
+This self-hosted adapter remains fully supported. Choose it when you want the provider connection inside your own infrastructure.
+
 ## Install
 
 ```sh
@@ -23,8 +43,12 @@ import {
   defaultSlackTools,
   defaultSlackContext,
 } from "@copilotkit/channels-slack";
+import { CopilotRuntime, CopilotKitIntelligence } from "@copilotkit/runtime/v2";
+import { createCopilotNodeListener } from "@copilotkit/runtime/v2/node";
 
 const bot = createChannel({
+  name: "support-bot", // project-unique Intelligence Channel name
+  identifyUser: "platform", // provider + workspace + human Slack user
   adapters: [
     slack({
       botToken: process.env.SLACK_BOT_TOKEN!, // xoxb-…
@@ -38,7 +62,20 @@ const bot = createChannel({
 
 bot.onMention(({ thread }) => thread.runAgent());
 
-await bot.start();
+// The runtime owns the channel's lifecycle — there is no `bot.start()`.
+const runtime = new CopilotRuntime({
+  intelligence: new CopilotKitIntelligence({
+    // apiUrl and wsUrl default to the managed Intelligence platform — override
+    // both together only for a self-hosted deployment.
+    apiKey: process.env.COPILOTKIT_INTELLIGENCE_API_KEY!, // free tier available
+  }),
+  channels: [bot],
+});
+
+// Creating the listener starts the Channel's connection.
+const listener = createCopilotNodeListener({ runtime });
+// Optional: await that activation so a broken config fails startup loudly.
+await listener.channels.ready(); // listener.channels.stop() tears it down
 ```
 
 `slack(opts)` returns a `SlackAdapter`. By default it runs in **Socket Mode**
@@ -140,10 +177,19 @@ is a thread — a true streaming UI rendering **raw markdown** (so real tables a
 fenced code render natively). A whole turn streams into **one** message: text
 from every step accumulates into a single bubble (Slack documents only a 12k
 char limit _per append_, with no cumulative cap, so there is no multi-message
-splitting), and tool calls surface as native in-message **`task_update`**
-chunks (a "timeline" of `Using …` → `Used …` steps) instead of separate status
-messages. Workspaces where structured chunks aren't available degrade
-automatically to `:wrench:` status rows.
+splitting). Tool-call progress is hidden by default so the final reply stays
+clean. Pass `showToolStatus: true` to surface calls as native in-message
+**`task_update`** chunks (a "timeline" of `Using …` → `Used …` steps) instead
+of separate status messages. Workspaces where structured chunks aren't
+available degrade automatically to `:wrench:` status rows.
+
+```ts
+slack({
+  botToken,
+  appToken,
+  showToolStatus: true,
+});
+```
 
 Flat DMs (no thread) and any workspace where the streaming API is unavailable
 fall back automatically to the shipped `chat.update` transport (throttled edits,
@@ -185,9 +231,10 @@ channel @-mentions, threads it owns, DMs, and the assistant pane. Slack now
 accepts this method with the ordinary **`chat:write`** scope (no `assistant:write`
 needed just for the loading state), so it works for channel-based apps too. The
 status auto-clears when the reply streams in. Tool progress is surfaced per
-surface: the pane uses live composer status ("is using \`tool\`…"); elsewhere it
-uses the native `task_update` timeline (or `:wrench:` rows on older workspaces).
-Set `assistant: false` to opt out of the status (and pane) entirely.
+surface only when `showToolStatus: true`: the pane uses live composer status
+("is using \`tool\`…"); elsewhere it uses the native `task_update` timeline
+(or `:wrench:` rows on older workspaces). Set `assistant: false` to opt out of
+the status (and pane) entirely.
 
 ### Assistant pane (agent-native, default-on)
 
@@ -197,8 +244,8 @@ the adapter activates Slack's assistant pane with **zero config**:
 
 - Opening the pane posts a greeting + tappable prompt chips, and each pane
   conversation is its own thread (replies stay in-thread).
-- While the agent runs, native composer status is shown (see above), with
-  "is using \`tool\`…" per tool call.
+- While the agent runs, native composer status is shown (see above). Opt in
+  with `showToolStatus: true` to show "is using \`tool\`…" per tool call.
 - The pane thread is auto-titled from the first message.
 
 Customize via the `assistant` option, or set `assistant: false` to disable pane
@@ -243,10 +290,29 @@ resumes the agent via `thread.resume(value)`.
 
 ### Sender-profile resolution & file download
 
-The adapter resolves each turn's Slack user id to a richer `PlatformUser`
-(`{ id, name?, email? }`), cached per id. Inbound files can be downloaded and
-delivered to the agent as multimodal content parts (`buildFileContentParts`);
-a tool can post a file back out via `thread.postFile(...)`.
+Handlers receive `actor`, the Slack account that caused the event, and `user`,
+the nullable application user returned by the Channel's `identifyUser` policy.
+The standard `"platform"` policy namespaces confirmed humans by provider and
+workspace. It does not map bots, apps, system actors, or unknown actors. Inbound
+files can be delivered to the agent as multimodal content parts; a tool can post
+a file back out via `thread.postFile(...)`.
+
+### Intelligence Memory
+
+Memory is off unless the specific run grants it:
+
+```ts
+bot.onMention(async ({ thread }) => {
+  await thread.runAgent({
+    memory: { user: "read", project: "read-write" },
+  });
+});
+```
+
+User Memory fails before the agent starts when `identifyUser` returns `null`.
+Project-only Memory works without an application user. A resumed run with user
+Memory must choose `subject: "initiator"` or `subject: "actor"`; callers cannot
+pass a raw user ID.
 
 ### Built-ins
 
@@ -265,7 +331,7 @@ methods, which this adapter backs:
 - `thread.getMessages()` — the current thread's messages (via
   `conversations.replies`), each a `ThreadMessage` (`{ user?, text, ts?,
 isBot? }`).
-- `thread.lookupUser(query)` — resolve a name/handle/email to a `PlatformUser`.
+- `thread.lookupUser(query)` — resolve a name/handle/email to a `ProviderActor`.
 - `thread.postFile({ bytes, filename, title?, altText? })` — upload a file
   back into the thread (`files.uploadV2`).
 
@@ -349,5 +415,6 @@ features your app uses:
 entries); `markdownToMrkdwn`; and the
 preserved mechanics (`SlackConversationStore`, `MessageStream`,
 `ChunkedMessageStream`, `NativeMessageStream`, `attachSlackListener`,
-`attachAssistant`, `SanitizingHttpAgent`, `buildFileContentParts`,
+`attachAssistant`, `SanitizingHttpAgent` (deprecated — Channels sanitize by
+default), `buildFileContentParts`,
 `autoCloseOpenMarkdown`, and supporting types).

@@ -7,6 +7,7 @@ import { z } from "zod";
 // can match fixtures by integration context. See ../header-forwarding.ts
 // for the full rationale; mirrors the Mastra precedent.
 import { forwardingFetch } from "../header-forwarding";
+import { DEMO_AGENT_LOOP_STRATEGY } from "./demo-stream";
 
 const CUSTOM_CATALOG_ID = "declarative-gen-ui-catalog";
 const A2UI_OPERATIONS_KEY = "a2ui_operations";
@@ -26,6 +27,42 @@ allocation) and \`BarChart\` for comparisons across categories (quarterly \
 revenue, headcount by team, signups per month). \`generate_a2ui\` takes a \
 single \`brief\` argument summarising what the UI should communicate. Keep \
 chat replies to one short sentence; let the UI do the talking.`;
+
+/**
+ * Extra instruction for the a2ui-recovery agent ONLY — declarative-gen-ui keeps
+ * the base prompt byte-for-byte.
+ *
+ * The recovery pills ask the assistant, in plain language, to "self-correct a
+ * malformed first attempt" and to build something that "fails every validation
+ * pass". Read literally by a real LLM, that is an invitation to keep retrying:
+ * the supervisor re-called `generate_a2ui` and the demo painted five identical
+ * cards. The retry loop lives INSIDE the tool (`buildGenerateA2uiTool`'s
+ * `maxAttempts`), which already returns on the first valid pass — so any
+ * supervisor-level retry is pure duplication.
+ *
+ * NOTE this makes the live demo honest rather than complete: against a real LLM
+ * the secondary designer succeeds on attempt 1, so the heal / exhaust branches
+ * are only ever exercised through the aimock fixtures. Making them reproducible
+ * live would require deliberate fault injection — a separate decision, recorded
+ * in PARITY_NOTES.md.
+ */
+const SINGLE_CALL_ADDENDUM = `Call \`generate_a2ui\` EXACTLY ONCE per user request. The tool runs its own \
+validate-and-retry loop internally and already returns the best surface it \
+could produce, so never call it a second time — not even if the user asks you \
+to self-correct, retry, or fix a malformed attempt, and not even if the result \
+looks wrong. After the single call, reply with one short sentence.`;
+
+/**
+ * Defensively unwrap a fenced code block (```json … ``` or ``` … ```) that the
+ * secondary LLM may wrap its JSON in, despite the system prompt asking for no
+ * fences. Returns the inner text trimmed; a non-fenced string is returned
+ * as-is (trimmed).
+ */
+function stripJsonFences(text: string): string {
+  const trimmed = text.trim();
+  const fence = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
+  return (fence ? fence[1] : trimmed).trim();
+}
 
 function createSurfaceOp(
   surfaceId: string,
@@ -148,15 +185,22 @@ async function runA2uiDesignAttempt(
   systemPrompt: string,
   parentAbortController: AbortController,
 ): Promise<A2uiAttemptResult> {
+  // NOTE: no `response_format: { type: "json_object" }` here. TanStack AI's
+  // OpenAI adapter (`openaiText`) targets the *Responses* API
+  // (`client.responses.create()`), which does NOT accept the Chat-Completions
+  // `response_format` param — passing it makes the call return an EMPTY string
+  // (verified against real OpenAI), so the secondary LLM produced no schema and
+  // the surface never painted. JSON-only output is instead enforced by
+  // SECONDARY_LLM_INSTRUCTIONS ("Output ONLY a single JSON object … no code
+  // fences"), the same approach the byoc-hashbrown / byoc-json-render factories
+  // use. `stripJsonFences` below defensively unwraps a ```json … ``` block in
+  // case the model adds one anyway.
   const text = await chat({
-    adapter: openaiText("gpt-4o", { fetch: forwardingFetch }),
+    adapter: openaiText("gpt-5.4", { fetch: forwardingFetch }),
     messages: [{ role: "user", content: brief }],
     systemPrompts: [systemPrompt],
     stream: false,
     abortController: parentAbortController,
-    modelOptions: {
-      response_format: { type: "json_object" },
-    },
   });
 
   // A non-string `chat()` return cannot be parsed and must not be
@@ -179,7 +223,7 @@ async function runA2uiDesignAttempt(
     data?: Record<string, unknown>;
   };
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(stripJsonFences(text));
   } catch {
     return { ok: false, error: "Secondary LLM returned non-JSON output" };
   }
@@ -397,11 +441,14 @@ function createA2uiAgent(recovery?: A2uiRecoveryConfig) {
       );
 
       return chat({
-        adapter: openaiText("gpt-4o", { fetch: forwardingFetch }),
+        adapter: openaiText("gpt-5.4", { fetch: forwardingFetch }),
         messages,
-        systemPrompts: [SYSTEM_PROMPT, ...systemPrompts],
+        systemPrompts: recovery
+          ? [SYSTEM_PROMPT, SINGLE_CALL_ADDENDUM, ...systemPrompts]
+          : [SYSTEM_PROMPT, ...systemPrompts],
         tools: [generateA2ui],
         abortController,
+        agentLoopStrategy: DEMO_AGENT_LOOP_STRATEGY,
       });
     },
   });

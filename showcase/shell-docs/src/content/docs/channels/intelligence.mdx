@@ -1,0 +1,294 @@
+---
+title: Configure the Channel in Intelligence
+nav_title: Configure the Channel in Intelligence
+icon: "lucide/CloudCog"
+description: Create a managed Channel, connect Slack or Teams, and hand its exact Code and runtime credentials to your SDK process.
+doc_type: how-to
+---
+
+This walkthrough starts with an Intelligence project and ends with a configured
+platform connection waiting for your Channels SDK runtime.
+
+In the managed path, Intelligence owns the provider connection and durable
+delivery edge. Your long-running process owns the agent, application tools,
+interactive behavior, state, and deployment.
+
+## Choose how to configure it
+
+Three supported paths do the same work. All three create the Channel, store the
+provider credentials, and leave the Channel waiting for your runtime.
+
+- **`copilotkit init`**, when the project does not exist yet. It offers a
+  Channel during setup and then leads you through the rest of it -- opening the
+  provider console, taking the two credentials at a masked prompt, and
+  attaching them -- after your dependencies install. The project it scaffolds
+  ships the long-running host too, so `npm run channel` is the only step left.
+- **The browser wizard**, below. Best when you want to see the Channel, its
+  health, and its threads while you set it up. Requires no terminal.
+- **The CLI**, `copilotkit channels`. Best for a project that already exists,
+  when you want the configuration checked into the repository, want to re-run
+  setup on another machine, or are working with an agent. It records the
+  Channel in `.copilotkit/channels.json`, generates the same provider app
+  manifest, and reports what remains at each stop.
+
+```bash
+npx copilotkit channels add support
+npx copilotkit channels status
+```
+
+`channels add` performs the next undone step and is safe to re-run. Where the
+flow needs you in a provider console it stops and prints what is needed, the URL
+to open, which environment variables to set, and the exact command to resume
+with. No flag accepts a credential value, and `--json` emits a versioned envelope
+for scripts and agents.
+
+<Callout type="info" title="The paths are interchangeable">
+  Any of them can finish what another started -- all three reconcile against the
+  same server state. A Channel created in the wizard can be managed with the CLI,
+  a Channel created with the CLI appears in the dashboard immediately, and a
+  Channel begun by `init` is finished by `channels add` if you skip its guided
+  step.
+</Callout>
+
+## Create and configure your Channel
+
+<FrontendOnly frontend="slack">
+
+<OpsPlatformCTA
+  variant="inline"
+  title="Get started with Enterprise Intelligence"
+  body="Create a free project to configure and manage your Slack Channel."
+  surface="docs:slack/quickstart:intelligence"
+/>
+
+</FrontendOnly>
+
+<FrontendOnly frontend="teams">
+
+<OpsPlatformCTA
+  variant="inline"
+  title="Get started with Enterprise Intelligence"
+  body="Create a free project to configure and manage your Microsoft Teams Channel."
+  surface="docs:teams/quickstart:intelligence"
+/>
+
+</FrontendOnly>
+
+<Image
+  src="/images/channels/intelligence-channels-overview.png"
+  alt="The Copilot Intelligence channel creation wizard showing the channel name, Code, and Slack and Teams platform options."
+  width={3188}
+  height={1778}
+  className="my-8 w-full rounded-xl border border-fd-border"
+/>
+
+<Callout type="info" title="One Channel can serve both providers">
+  Attach Slack, Microsoft Teams, or both to one Intelligence Channel. The
+  Channel uses one Code and one SDK handler set; each event and reply remains in
+  its originating provider conversation.
+</Callout>
+
+<Steps>
+  <Step>
+    ### Open the Channels area
+
+    In CopilotKit Intelligence, open your project, go to **Channels**, and click
+    **Add channel**. In an empty project, the action is **Create channel**.
+
+    The wizard has three phases: **Name & platforms**, **Setup**, and **Review**.
+
+  </Step>
+
+  <Step>
+    ### Set the Display name and Code
+
+    Enter a human-readable **Display name**. Intelligence derives the **Code**
+    automatically; click **Edit** only if you need to change it.
+
+    The Code is part of the runtime contract:
+
+    - 3–64 characters
+    - starts with a lowercase letter
+    - lowercase letters and numbers separated by single hyphens
+    - project-unique
+    - cannot be `channels`
+
+    Your SDK declaration must use that exact Code:
+
+    ```ts title="channel.ts"
+    import { createChannel } from "@copilotkit/channels";
+    import { makeAgent } from "./agent.js";
+
+    const channel = createChannel({
+      name: "support",
+      identifyUser: "platform",
+      agent: makeAgent,
+    });
+    ```
+
+    A mismatch leaves the Channel at **Waiting for runtime**.
+
+  </Step>
+
+  <Step>
+    ### Choose providers
+
+    Select Slack, Microsoft Teams, or both. Each connection has its own setup
+    and installation steps but shares this Channel's Code and runtime
+    declaration.
+
+    <FrontendOnly frontend="slack">
+
+    Configure Slack for this guide. You can attach Teams to the same Channel
+    now or later without changing the Code.
+
+    </FrontendOnly>
+
+    <FrontendOnly frontend="teams">
+
+    Configure Microsoft Teams for this guide. You can attach Slack to the same
+    Channel now or later without changing the Code.
+
+    </FrontendOnly>
+
+    Slack and Teams use the same managed delivery path. If a provider says
+    **Not on your plan**, change the project entitlement before continuing.
+
+    Managed Intelligence support for Discord and WhatsApp shows **Coming
+    soon**. The Channels SDK already exports developer-operated direct adapters
+    for those providers.
+
+  </Step>
+
+  <FrontendOnly frontend="slack">
+
+  <Step>
+    ### Connect Slack
+
+    1. Copy the generated manifest, open Slack's app-creation flow, and create
+       the app **From a manifest** using the YAML.
+    2. In **OAuth & Permissions**, click **Install to Workspace**, approve the
+       app, and paste the `xoxb-…` **Bot User OAuth Token** into **Bot token**.
+    3. In **Basic Information → App Credentials**, copy the
+       **Signing Secret** into Intelligence.
+    4. Invite the app to a channel with `/invite @<app-handle>`, or open a
+       direct message with it.
+
+    Slack sends signed Events API requests to the public Intelligence URL in
+    the generated manifest. Hosted Intelligence provides that URL; a
+    self-hosted deployment must expose it. Managed slash commands are not part
+    of the Channels product surface.
+
+  </Step>
+
+  </FrontendOnly>
+
+  <FrontendOnly frontend="teams">
+
+  <Step>
+    ### Connect Microsoft Teams
+
+    1. In Microsoft Entra, create or open the bot's app registration. Copy its
+       **Application (client) ID** and **Directory (tenant) ID**, then create a
+       client secret.
+    2. In Azure, create an **Azure Bot** backed by that app registration.
+    3. In the bot's **Configuration**, set the exact read-only
+       **Messaging endpoint** shown by Intelligence and enable the
+       **Microsoft Teams** channel.
+    4. In Intelligence, enter the required **Client ID** (the app
+       registration's Application/client ID), **Client secret**, and **Tenant
+       ID**. These credentials are write-only after submission.
+    5. Before downloading, enter that same Application/client ID in
+       **Azure Bot App ID**, then click **Download app package (.zip)**. If you
+       leave it blank, replace both `<your-azure-bot-app-id>` placeholders in
+       the downloaded manifest before uploading it.
+    6. Upload the completed package in Teams Developer Portal, or through
+       **Apps → Manage your apps → Upload a custom app**, and add it to a team
+       or chat.
+
+    Do not replace the generated messaging endpoint with your Channels runner
+    URL. Intelligence owns the public Teams edge.
+
+  </Step>
+
+  </FrontendOnly>
+
+  <Step>
+    ### Review and create
+
+    In the **Review** phase, confirm the Display name, Code, and selected
+    platform, then click **Create channel**.
+
+    Credential validation is not an end-to-end message test.
+
+    <FrontendOnly frontend="slack">
+
+    A valid but mismatched Slack token pair can still fail at runtime.
+
+    </FrontendOnly>
+
+    <FrontendOnly frontend="teams">
+
+    A valid app registration can still fail if the Azure Bot or Teams app
+    package points at the wrong identity.
+
+    </FrontendOnly>
+
+  </Step>
+
+  <Step>
+    ### Configure the runtime handoff
+
+    On the new Channel page, open **Connect a runtime**. The **Environment file
+    (.env)** block names the Intelligence variables with blank values.
+
+    Store the project-scoped API key in your secret manager and configure your
+    long-running Channels process with:
+
+    ```dotenv title=".env"
+    INTELLIGENCE_API_KEY=<project-api-key>
+    CHANNEL_CODE=<your-channel-code>
+
+    # Optional paired overrides for self-hosted or non-production Intelligence:
+    # INTELLIGENCE_API_URL=https://intelligence.example.com
+    # INTELLIGENCE_GATEWAY_WS_URL=wss://realtime.intelligence.example.com
+    ```
+
+    Hosted Intelligence supplies both managed base URLs by default. If you
+    override them for a self-hosted or non-production deployment, replace both
+    together. The REST and realtime planes use separate hosts, so do not derive
+    the WebSocket URL by changing the API URL's scheme. Pass bare base URLs:
+    the client appends `/api/...`, `/runner`, `/client`, or `/channels` itself.
+    Do not append `/api`, `/socket`, `/runner`, `/client`, or `/channels`.
+
+    Open **API Keys** in the project sidebar to create and copy the
+    project-scoped runtime key.
+
+    You choose `CHANNEL_CODE` from the exact Code above, and the selected agent
+    framework adds its own backend variables. The SDK receives the Intelligence
+    values through the `apiKey` constructor property and optional `apiUrl` /
+    `wsUrl` overrides shown in the platform connection guides.
+
+    Never expose the Intelligence key, Slack tokens, or Teams client secret in
+    browser code or source control.
+
+  </Step>
+</Steps>
+
+## Next step
+
+<FrontendOnly frontend="slack">
+
+Your Slack Channel should now be **Waiting for runtime**. Continue to
+[Connect and run your agent](/slack/connect) with `CHANNEL_CODE` and
+`INTELLIGENCE_API_KEY`.
+
+</FrontendOnly>
+
+<FrontendOnly frontend="teams">
+
+Your Microsoft Teams Channel should now be **Waiting for runtime**. Continue to
+[Connect and run your agent](/teams/connect) with `CHANNEL_CODE` and
+`INTELLIGENCE_API_KEY`.
+
+</FrontendOnly>
