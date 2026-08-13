@@ -47,15 +47,46 @@ import { CopilotKit } from "@copilotkit/angular";
 const copilotKit = inject(CopilotKit);
 
 copilotKit.updateRuntime({
-  headers: sessionToken
-    ? { Authorization: `Bearer ${sessionToken}` }
-    : {},
+  headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
 });
 ```
 
 The runnable Angular Showcase uses the same header shape:
 
 <AngularSnippet region="runtime-auth-headers" />
+
+## Send HTTP-only cookies across origins
+
+When the Angular app and Copilot Runtime use different origins, opt in to
+credentialed Fetch requests so the browser can send the runtime's HTTP-only
+session cookie:
+
+```ts title="src/app/app.config.ts"
+import { ApplicationConfig } from "@angular/core";
+import { provideCopilotKit } from "@copilotkit/angular";
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideCopilotKit({
+      runtimeUrl: "https://api.example.com/copilotkit",
+      credentials: "include",
+    }),
+  ],
+};
+```
+
+The setting is used by Angular-created runtime requests and by provisional or
+remote agents. A caller-provided `selfManagedAgents` transport keeps its own
+credentials setting. Omitting `credentials` preserves the existing browser
+default.
+
+The runtime must return `Access-Control-Allow-Credentials: true` and an
+explicit `Access-Control-Allow-Origin` matching the Angular app, such as
+`https://app.example.com`; credentialed requests cannot use the `*` origin.
+For cookies that are genuinely cross-site, configure the cookie with `Secure`
+and `SameSite=None` as well. These browser settings do not change Copilot
+Runtime security defaults: continue to validate and authorize every request on
+the server.
 
 ## Validate every runtime request
 
