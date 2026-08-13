@@ -37,6 +37,11 @@ export interface A2UIRecoveryOptions {
 export interface CopilotKitConfig {
   runtimeUrl?: string;
   headers?: Record<string, string>;
+  /**
+   * Fetch credentials mode used by Angular-created Copilot Runtime transports.
+   * Self-managed agents retain their own transport credentials configuration.
+   */
+  credentials?: RequestCredentials;
   licenseKey?: string;
   properties?: Record<string, unknown>;
   agents?: Record<string, AbstractAgent>;

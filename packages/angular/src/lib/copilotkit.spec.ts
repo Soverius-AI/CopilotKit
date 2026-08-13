@@ -32,6 +32,7 @@ const mockRemoveTool = vi.fn();
 const mockSetRuntimeUrl = vi.fn();
 const mockSetRuntimeTransport = vi.fn();
 const mockSetHeaders = vi.fn();
+const mockSetCredentials = vi.fn();
 const mockSetProperties = vi.fn();
 const mockSetAgents = vi.fn();
 const mockGetAgent = vi.fn();
@@ -59,6 +60,7 @@ vi.mock("@copilotkit/core", () => {
     readonly setRuntimeUrl = mockSetRuntimeUrl;
     readonly setRuntimeTransport = mockSetRuntimeTransport;
     readonly setHeaders = mockSetHeaders;
+    readonly setCredentials = mockSetCredentials;
     readonly setProperties = mockSetProperties;
     readonly setAgents__unsafe_dev_only = mockSetAgents;
     readonly getAgent = mockGetAgent;
@@ -69,6 +71,7 @@ vi.mock("@copilotkit/core", () => {
     runtimeUrl = undefined;
     runtimeTransport = "auto";
     headers: Record<string, string> = {};
+    credentials: RequestCredentials | undefined;
     a2uiEnabled = false;
     openGenerativeUIEnabled = false;
     runtimeConnectionStatus =
@@ -78,6 +81,7 @@ vi.mock("@copilotkit/core", () => {
     constructor(config: any) {
       lastCoreConfig = config;
       lastCoreInstance = this;
+      this.credentials = config.credentials;
       mockSubscribe.mockImplementationOnce((listener: any) => {
         this.listener = listener;
         return { unsubscribe: vi.fn() };
@@ -173,6 +177,25 @@ describe("CopilotKit", () => {
       },
     ]);
   });
+
+  it.each([
+    ["the browser default", undefined],
+    ['"omit"', "omit"],
+    ['"same-origin"', "same-origin"],
+    ['"include"', "include"],
+  ] as const)(
+    "passes %s credentials mode to CopilotKitCore",
+    (_label, credentials) => {
+      TestBed.configureTestingModule({
+        providers: [provideCopilotKit({ licenseKey, credentials })],
+      });
+
+      const copilotkit = TestBed.inject(CopilotKit);
+
+      expect(lastCoreConfig.credentials).toBe(credentials);
+      expect(copilotkit.credentials()).toBe(credentials);
+    },
+  );
 
   it("tracks client tools and executes handlers within injection context", async () => {
     const handlerSpy = vi.fn().mockResolvedValue("handled");
@@ -482,6 +505,7 @@ describe("CopilotKit", () => {
       runtimeUrl: "https://other",
       runtimeTransport: "single",
       headers: { Authorization: "different" },
+      credentials: "include",
       properties: { locale: "en" },
       agents: { a: {} as any },
     });
@@ -489,6 +513,7 @@ describe("CopilotKit", () => {
     expect(mockSetRuntimeUrl).toHaveBeenCalledWith("https://other");
     expect(mockSetRuntimeTransport).toHaveBeenCalledWith("single");
     expect(mockSetHeaders).toHaveBeenCalledWith({ Authorization: "different" });
+    expect(mockSetCredentials).toHaveBeenCalledWith("include");
     expect(mockSetProperties).toHaveBeenCalledWith({ locale: "en" });
     expect(mockSetAgents).toHaveBeenCalledWith({ a: {} });
   });

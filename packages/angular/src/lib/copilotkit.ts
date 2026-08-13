@@ -4,6 +4,7 @@ import {
   CopilotKitCore,
   CopilotKitCoreRuntimeConnectionStatus,
   CopilotRuntimeTransport,
+  ProxiedCopilotRuntimeAgent,
   type CopilotKitCoreGetSuggestionsResult,
   type IntelligenceRuntimeInfo,
   type RuntimeLicenseStatus,
@@ -77,9 +78,36 @@ function withA2UICatalogCapability(
     : properties;
 }
 
+/**
+ * Core credentials belong to Angular-created runtime transports. A caller's
+ * self-managed proxied agent owns its transport configuration, so preserve its
+ * credentials while core initializes or refreshes the combined agent map.
+ */
+function preserveSelfManagedAgentCredentials<T>(
+  agents: Record<string, AbstractAgent> | undefined,
+  operation: () => T,
+): T {
+  const snapshots = Object.values(agents ?? {})
+    .filter(
+      (agent): agent is ProxiedCopilotRuntimeAgent =>
+        agent instanceof ProxiedCopilotRuntimeAgent,
+    )
+    .map((agent) => ({ agent, credentials: agent.credentials }));
+
+  try {
+    return operation();
+  } finally {
+    for (const { agent, credentials } of snapshots) {
+      agent.credentials = credentials;
+    }
+  }
+}
+
 @Injectable({ providedIn: "root" })
 export class CopilotKit {
   readonly #config = injectCopilotKitConfig();
+  #configuredAgents = this.#config.agents ?? {};
+  #selfManagedAgents = this.#config.selfManagedAgents ?? {};
   readonly #extensionActivityMessageRenderers = inject(
     ɵCOPILOTKIT_BUILT_IN_ACTIVITY_RENDERERS,
   );
@@ -103,6 +131,8 @@ export class CopilotKit {
   readonly runtimeTransport = this.#runtimeTransport.asReadonly();
   readonly #headers = signal<Record<string, string>>({});
   readonly headers = this.#headers.asReadonly();
+  readonly #credentials = signal<RequestCredentials | undefined>(undefined);
+  readonly credentials = this.#credentials.asReadonly();
   readonly #threadEndpoints = signal<ThreadEndpointRuntimeInfo | undefined>(
     undefined,
   );
@@ -137,20 +167,25 @@ export class CopilotKit {
   >({});
   readonly suggestionsByAgent = this.#suggestionsByAgent.asReadonly();
 
-  readonly core = new CopilotKitCore({
-    runtimeUrl: this.#config.runtimeUrl,
-    headers: this.#config.headers,
-    agents__unsafe_dev_only: {
-      ...this.#config.agents,
-      ...this.#config.selfManagedAgents,
-    },
-    tools: this.#config.tools,
-    suggestionsConfig: this.#config.suggestionsConfig,
-    properties: withA2UICatalogCapability(
-      this.#config.properties,
-      this.#config.a2ui?.catalog !== undefined,
-    ),
-  });
+  readonly core = preserveSelfManagedAgentCredentials(
+    this.#selfManagedAgents,
+    () =>
+      new CopilotKitCore({
+        runtimeUrl: this.#config.runtimeUrl,
+        headers: this.#config.headers,
+        credentials: this.#config.credentials,
+        agents__unsafe_dev_only: {
+          ...this.#configuredAgents,
+          ...this.#selfManagedAgents,
+        },
+        tools: this.#config.tools,
+        suggestionsConfig: this.#config.suggestionsConfig,
+        properties: withA2UICatalogCapability(
+          this.#config.properties,
+          this.#config.a2ui?.catalog !== undefined,
+        ),
+      }),
+  );
 
   readonly #toolCallRenderConfigs: WritableSignal<RenderToolCallConfig[]> =
     signal([]);
@@ -204,6 +239,7 @@ export class CopilotKit {
     this.#runtimeUrl.set(this.core.runtimeUrl);
     this.#runtimeTransport.set(this.core.runtimeTransport);
     this.#headers.set(this.core.headers);
+    this.#credentials.set(this.core.credentials);
     this.#threadEndpoints.set(this.core.threadEndpoints);
     this.#intelligence.set(this.core.intelligence);
     this.#licenseStatus.set(this.core.licenseStatus);
@@ -598,6 +634,7 @@ export class CopilotKit {
     runtimeUrl?: string;
     runtimeTransport?: CopilotRuntimeTransport;
     headers?: Record<string, string>;
+    credentials?: RequestCredentials;
     properties?: Record<string, unknown>;
     agents?: Record<string, AbstractAgent>;
     selfManagedAgents?: Record<string, AbstractAgent>;
@@ -614,6 +651,12 @@ export class CopilotKit {
       this.core.setHeaders(options.headers);
       this.#headers.set(options.headers);
     }
+    if ("credentials" in options) {
+      preserveSelfManagedAgentCredentials(this.#selfManagedAgents, () => {
+        this.core.setCredentials(options.credentials);
+      });
+      this.#credentials.set(options.credentials);
+    }
     if (options.properties !== undefined) {
       this.core.setProperties(
         withA2UICatalogCapability(
@@ -626,9 +669,17 @@ export class CopilotKit {
       options.agents !== undefined ||
       options.selfManagedAgents !== undefined
     ) {
-      this.core.setAgents__unsafe_dev_only({
-        ...(options.agents ?? this.#config.agents),
-        ...(options.selfManagedAgents ?? this.#config.selfManagedAgents),
+      if (options.agents !== undefined) {
+        this.#configuredAgents = options.agents;
+      }
+      if (options.selfManagedAgents !== undefined) {
+        this.#selfManagedAgents = options.selfManagedAgents;
+      }
+      preserveSelfManagedAgentCredentials(this.#selfManagedAgents, () => {
+        this.core.setAgents__unsafe_dev_only({
+          ...this.#configuredAgents,
+          ...this.#selfManagedAgents,
+        });
       });
     }
   }

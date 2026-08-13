@@ -17,6 +17,7 @@ import type {
 import { Observable } from "rxjs";
 import { AgentStore, injectAgentStore } from "./agent";
 import { CopilotKit } from "./copilotkit";
+import { provideCopilotKit } from "./config";
 import {
   CopilotKitCore,
   ProxiedCopilotRuntimeAgent,
@@ -31,6 +32,7 @@ type StubCore = Pick<
   | "runtimeTransport"
   | "runtimeConnectionStatus"
   | "headers"
+  | "credentials"
   | "subscribeToAgentWithOptions"
 > & {
   agents?: Record<string, AbstractAgent>;
@@ -151,18 +153,21 @@ class CopilotKitStub {
   readonly #runtimeUrl = signal<string | undefined>(undefined);
   readonly #runtimeTransport = signal<"rest" | "single" | "auto">("auto");
   readonly #headers = signal<Record<string, string>>({});
+  readonly #credentials = signal<RequestCredentials | undefined>(undefined);
   getAgent = vi.fn((id: string) => this.#agents()[id]);
   agents = this.#agents.asReadonly();
   runtimeConnectionStatus = this.#runtimeConnectionStatus.asReadonly();
   runtimeUrl = this.#runtimeUrl.asReadonly();
   runtimeTransport = this.#runtimeTransport.asReadonly();
   headers = this.#headers.asReadonly();
+  credentials = this.#credentials.asReadonly();
   #coreInstance = new CopilotKitCore({});
   core: StubCore = {
     runtimeUrl: undefined,
     runtimeTransport: "auto",
     runtimeConnectionStatus: CopilotKitCoreRuntimeConnectionStatus.Disconnected,
     headers: {},
+    credentials: undefined,
     subscribeToAgentWithOptions:
       this.#coreInstance.subscribeToAgentWithOptions.bind(this.#coreInstance),
   };
@@ -185,6 +190,11 @@ class CopilotKitStub {
   setHeaders(value: Record<string, string>) {
     this.#headers.set(value);
     this.core = { ...this.core, headers: value };
+  }
+
+  setCredentials(value: RequestCredentials | undefined) {
+    this.#credentials.set(value);
+    this.core = { ...this.core, credentials: value };
   }
 
   setRuntimeTransport(value: "rest" | "single" | "auto") {
@@ -325,6 +335,61 @@ describe("injectAgentStore", () => {
     const proxiedAgent = proxied as ProxiedCopilotRuntimeAgent;
     expect(proxiedAgent.agentId).toBe("missing");
     expect(proxiedAgent.headers).toEqual({ "x-test": "1" });
+    expect(proxiedAgent.credentials).toBeUndefined();
+  });
+
+  it.each(["omit", "same-origin", "include"] as const)(
+    "passes %s credentials to a provisional runtime agent",
+    (credentials) => {
+      copilotKitStub.setAgents({});
+      copilotKitStub.setRuntimeUrl("https://runtime.local");
+      copilotKitStub.setCredentials(credentials);
+      copilotKitStub.setRuntimeConnectionStatus(
+        CopilotKitCoreRuntimeConnectionStatus.Connecting,
+      );
+
+      @Component({
+        standalone: true,
+        template: "",
+      })
+      class MissingAgentHost {
+        store = injectAgentStore("missing");
+      }
+
+      const fixture = TestBed.createComponent(MissingAgentHost);
+      const agent = fixture.componentInstance.store()
+        .agent as ProxiedCopilotRuntimeAgent;
+
+      expect(agent.credentials).toBe(credentials);
+    },
+  );
+
+  it("updates credentials on a cached provisional runtime agent", () => {
+    copilotKitStub.setAgents({});
+    copilotKitStub.setRuntimeUrl("https://runtime.local");
+    copilotKitStub.setCredentials("include");
+    copilotKitStub.setRuntimeConnectionStatus(
+      CopilotKitCoreRuntimeConnectionStatus.Connecting,
+    );
+
+    @Component({
+      standalone: true,
+      template: "",
+    })
+    class MissingAgentHost {
+      store = injectAgentStore("missing");
+    }
+
+    const fixture = TestBed.createComponent(MissingAgentHost);
+    const initialAgent = fixture.componentInstance.store()
+      .agent as ProxiedCopilotRuntimeAgent;
+
+    copilotKitStub.setCredentials("omit");
+
+    const updatedAgent = fixture.componentInstance.store()
+      .agent as ProxiedCopilotRuntimeAgent;
+    expect(updatedAgent).toBe(initialAgent);
+    expect(updatedAgent.credentials).toBe("omit");
   });
 
   it("shares a provisional runtime agent across same-id consumers", () => {
@@ -639,5 +704,38 @@ describe("injectAgentStore", () => {
     agent.pushMessageInPlace(userMsg("2", "World"));
     fixture.detectChanges();
     expect(rendered()).toBe("2");
+  });
+});
+
+describe("CopilotKit self-managed agent credentials", () => {
+  beforeEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it("preserves a self-managed agent's own credentials mode", () => {
+    const selfManagedAgent = new ProxiedCopilotRuntimeAgent({
+      runtimeUrl: "https://self-managed.example",
+      agentId: "self-managed",
+      credentials: "same-origin",
+    });
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideCopilotKit({
+          credentials: "include",
+          selfManagedAgents: { "self-managed": selfManagedAgent },
+        }),
+      ],
+    });
+
+    const copilotkit = TestBed.inject(CopilotKit);
+
+    expect(copilotkit.core.credentials).toBe("include");
+    expect(selfManagedAgent.credentials).toBe("same-origin");
+
+    copilotkit.updateRuntime({ credentials: "omit" });
+
+    expect(copilotkit.core.credentials).toBe("omit");
+    expect(selfManagedAgent.credentials).toBe("same-origin");
   });
 });
