@@ -64,14 +64,14 @@ export const appConfig: ApplicationConfig = {
           available: "always",
           suggestions: [
             {
-              title: "Shopping checkout",
+              title: "Shopping inputs",
               message:
-                "Create a complete shopping checkout with products, quantities, contact and delivery fields, delivery choices, gift wrapping, a live total, validation, and a preview order button.",
+                "Create a Moss & Fern shopping card with a two-item order summary: Monstera plant $35 and ceramic pot $18, total $53. Add bound inputs for customer name, email, street, city, country, delivery option, gift wrapping, and delivery notes. Put these controls in a Column and a Review order Button. Use Button onClick=Event review_order with every input data path in its context. Do not use a Form component or submit=true. Use a calm green title and a clean layout. Initialize every data path. Keep the total literal; no arithmetic.",
             },
             {
-              title: "Project brief",
+              title: "Informational card",
               message:
-                "Create a project brief with name, email, company, role dropdown, start date, budget slider, contact preferences, project notes, consent, validation, and a submit button.",
+                'Create an informational card titled "Made by Gemini Nano" with the subtitle "Running on this Mac". Explain the three steps: a natural-language request, Express compilation, and native Angular rendering. Include a badge saying "Local model". Use a calm green accent.',
             },
             {
               title: "Edit this view",
