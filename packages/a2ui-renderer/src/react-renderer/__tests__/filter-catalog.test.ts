@@ -21,6 +21,7 @@ function makeCatalog(): Catalog<ComponentApi> {
   ];
   return new Catalog<ComponentApi>(
     "copilotkit://custom-catalog",
+    "0.9",
     components,
     [],
   );
@@ -64,6 +65,7 @@ describe("filterCatalog", () => {
     ];
     const catalog = new Catalog<ComponentApi>(
       "copilotkit://themed-catalog",
+      "0.9",
       components,
       [uppercase],
       themeSchema,

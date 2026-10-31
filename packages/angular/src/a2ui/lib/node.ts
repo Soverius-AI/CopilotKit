@@ -150,7 +150,7 @@ export class CopilotA2UINode {
   protected readonly implementation = computed(() => {
     const model = this.model();
     return model
-      ? this.surface().catalog.components.get(model.type)
+      ? this.surface().catalog?.components.get(model.type)
       : undefined;
   });
 

@@ -15,6 +15,7 @@ function makeCustomCatalog(): Catalog<ComponentApi> {
   ];
   return new Catalog<ComponentApi>(
     "copilotkit://custom-catalog",
+    "0.9",
     components,
     [],
   );

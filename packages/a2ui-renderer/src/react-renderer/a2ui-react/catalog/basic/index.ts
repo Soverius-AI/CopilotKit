@@ -60,6 +60,7 @@ const basicComponents: ReactComponentImplementation[] = [
 
 export const basicCatalog = new Catalog<ReactComponentImplementation>(
   "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "0.9",
   basicComponents,
   BASIC_FUNCTIONS,
 );

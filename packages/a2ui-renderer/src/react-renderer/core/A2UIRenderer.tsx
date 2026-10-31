@@ -1,5 +1,7 @@
-import { Suspense, memo, type ReactNode } from "react";
+import { Suspense, memo } from "react";
+import type { ReactNode } from "react";
 import { useA2UI } from "../hooks/useA2UI";
+import { useA2UIError } from "./A2UIProvider";
 import { A2uiSurface } from "../a2ui-react";
 import { cn } from "../lib/utils";
 
@@ -38,6 +40,16 @@ export const A2UIRenderer = memo(function A2UIRenderer({
   loadingFallback,
 }: A2UIRendererProps) {
   const { getSurface, version } = useA2UI();
+  const error = useA2UIError();
+
+  if (error) {
+    return (
+      <div role="alert">
+        Unable to display this interface: {error}. Ask the assistant to correct
+        the interface and try again.
+      </div>
+    );
+  }
 
   // Get v0.9 SurfaceModel - this will re-render when version changes
   const surface = getSurface(surfaceId);

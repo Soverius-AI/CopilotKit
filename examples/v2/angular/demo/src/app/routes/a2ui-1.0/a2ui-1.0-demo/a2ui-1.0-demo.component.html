@@ -1,0 +1,226 @@
+<div class="page">
+  <header>
+    <div class="identity">
+      <a href="/generative-ui" aria-label="Back to generative UI">C↗</a>
+      <div>
+        <div class="eyebrow">COPILOTKIT / BROWSER LAB</div>
+        <h1>A2UI <span>1.0</span> Express</h1>
+      </div>
+    </div>
+    <div class="model-controls">
+      <span class="local-badge">● ON DEVICE</span
+      ><button (click)="reset()" [disabled]="running()">Reset</button
+      ><button class="primary" (click)="enable()" [disabled]="!canEnable()">
+        {{
+          debug().availability === "enabled"
+            ? "Model enabled"
+            : "Enable local model"
+        }}
+      </button>
+    </div>
+  </header>
+  <section class="intro">
+    <div>
+      <h2>Describe an interface. Watch it become real.</h2>
+      <p>
+        CopilotKit context + Express examples teach Gemini Nano the UI language.
+        Everything runs in your browser.
+      </p>
+    </div>
+    <div class="pipeline">
+      <span>01 · PROMPT</span>→<span>02 · EXPRESS</span>→<span
+        >03 · NATIVE UI</span
+      >
+    </div>
+  </section>
+  <div class="status" role="status" aria-live="polite">
+    <span
+      class="dot"
+      [class.enabled]="debug().availability === 'enabled'"
+    ></span>
+    @switch (debug().availability) {
+      @case ("enabled") {
+        <span>Gemini Nano is ready. Send a request in the conversation.</span>
+      }
+      @case ("unsupported") {
+        <span
+          >Prompt API unavailable. Use eligible desktop Chrome on localhost or
+          HTTPS. You can still compile and edit presets.</span
+        >
+      }
+      @case ("unavailable") {
+        <span
+          >Chrome reports that this device cannot run the model. Presets and the
+          compiler remain available.</span
+        >
+      }
+      @case ("downloadable") {
+        <span
+          >Enable the local model to download Gemini Nano. Chrome manages the
+          download.</span
+        >
+      }
+      @case ("downloading") {
+        <span
+          >Preparing Gemini Nano…
+          {{ (debug().downloadProgress * 100).toFixed(0) }}%</span
+        >
+      }
+      @case ("available") {
+        <span
+          >Gemini Nano is installed. Enable the local model to start a
+          session.</span
+        >
+      }
+      @default {
+        <span>Model: {{ debug().availability }} · {{ debug().stage }}</span>
+      }
+    }
+    <a
+      href="https://developer.chrome.com/docs/ai/prompt-api"
+      target="_blank"
+      rel="noreferrer"
+      >Chrome setup ↗</a
+    >
+  </div>
+  <main>
+    <section class="conversation panel" aria-label="CopilotKit conversation">
+      <div class="panel-heading">
+        <span><i>01</i> Conversation</span><small>CHROME PROMPT API</small>
+      </div>
+      <copilot-chat [agentId]="agentId" class="chat" />
+    </section>
+    <section class="workbench">
+      <div class="workspace">
+        <section class="source panel">
+          <div class="panel-heading">
+            <span><i>02</i> Express source</span
+            ><small>{{
+              debug().source === "model" ? "MODEL OUTPUT" : "MANUAL / PRESET"
+            }}</small>
+          </div>
+          <div class="presets">
+            <span>TRY A PRESET</span
+            ><button
+              (click)="preset('card')"
+              [disabled]="!ready() || running()"
+            >
+              Card</button
+            ><button
+              (click)="preset('form')"
+              [disabled]="!ready() || running()"
+            >
+              Bound form
+            </button>
+          </div>
+          <label for="express-source" class="sr-only"
+            >Editable A2UI Express source</label
+          ><textarea
+            id="express-source"
+            spellcheck="false"
+            [value]="draft()"
+            (input)="draft.set($any($event.target).value)"
+            [readOnly]="running()"
+          ></textarea>
+          <div class="editor-footer">
+            <span>{{ draft().length }} characters · A2UI v1.0 candidate</span
+            ><button
+              class="primary"
+              (click)="compile()"
+              [disabled]="!ready() || running() || !draft().trim()"
+            >
+              Compile & render ↗
+            </button>
+          </div>
+        </section>
+        <section class="preview panel">
+          <div class="panel-heading">
+            <span><i>03</i> Native preview</span><small>ANGULAR</small>
+          </div>
+          <div class="preview-canvas">
+            <copilot-generative-ui-surface
+              id="express-preview"
+              description="The live preview next to the Express editor. Render every interface here."
+              [components]="components"
+              [autoScroll]="false"
+              ><div class="empty-preview">
+                <div class="braces">&#123; &#125;</div>
+                <h3>Your interface appears here</h3>
+                <p>
+                  Enable Gemini Nano and describe a UI, or compile a preset to
+                  explore Express.
+                </p>
+              </div></copilot-generative-ui-surface
+            >
+          </div>
+          <div class="preview-footer">
+            <span>Native components · reactive bindings</span
+            ><button
+              (click)="update()"
+              [disabled]="running() || !activeSurfaceId()"
+            >
+              Apply data update
+            </button>
+          </div>
+        </section>
+      </div>
+      <section class="debug panel" aria-label="Agent state debugger">
+        <div class="debug-heading">
+          <div class="tabs" role="group" aria-label="Debug view">
+            <button
+              [class.selected]="tab() === 'operations'"
+              (click)="tab.set('operations')"
+            >
+              Compiled JSON</button
+            ><button
+              [class.selected]="tab() === 'prompt'"
+              (click)="tab.set('prompt')"
+            >
+              System prompt</button
+            ><button
+              [class.selected]="tab() === 'state'"
+              (click)="tab.set('state')"
+            >
+              Agent state
+            </button>
+          </div>
+          <div class="run-status">
+            <span>{{ debug().stage }}</span
+            ><small
+              >{{ debug().elapsedMs }} ms · compile
+              {{ debug().compileMs }} ms</small
+            >
+            @if (running()) {
+              <button (click)="stop()">Stop</button>
+            }
+          </div>
+        </div>
+        @if (debug().diagnostics.length) {
+          <div class="diagnostics" role="alert">
+            @for (diagnostic of debug().diagnostics; track $index) {
+              <p>{{ diagnostic }}</p>
+            }
+          </div>
+        }
+        @switch (tab()) {
+          @case ("operations") {
+            <pre>{{ debug().operations | json }}</pre>
+          }
+          @case ("prompt") {
+            <pre>{{
+              debug().systemPrompt ||
+                "Loading the catalog and Express contract…"
+            }}</pre>
+          }
+          @case ("state") {
+            <pre>{{ debug() | json }}</pre>
+          }
+        }
+        <div class="debug-footer">
+          DSL and diagnostics arrive through AG-UI agent state. Validated
+          operations render through CopilotKit surface activities.
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

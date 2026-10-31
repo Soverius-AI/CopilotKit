@@ -13,6 +13,10 @@ import { provideGenerativeUIIcons } from "@copilotkit/angular/generative-ui/icon
 import { provideGenerativeUIMap } from "@copilotkit/angular/generative-ui/map";
 import { shopUI } from "./routes/generative-ui/shop-ui";
 import { CatalogAgent } from "./routes/generative-ui/catalog-agent";
+import {
+  ChromeExpressAgent,
+  EXPRESS_AGENT_ID,
+} from "./routes/a2ui-1.0/chrome-express-agent";
 import { WildcardToolRenderComponent } from "./components/wildcard-tool-render.component";
 import { a2uiDemoSandboxFunctions } from "./routes/a2ui/a2ui-demo-sandbox-functions";
 import { dashboardCatalog } from "./routes/a2ui-angular/dashboard-catalog";
@@ -33,11 +37,19 @@ export const appConfig: ApplicationConfig = {
     provideGenerativeUIIcons(),
     provideGenerativeUIMap(),
     provideCopilotKit({
-      runtimeUrl: "http://localhost:3001/api/copilotkit",
+      // This route's self-managed agent needs no server. Reload when leaving
+      // its standalone browser session to restore the other demos' runtime.
+      runtimeUrl:
+        globalThis.location?.pathname === "/a2ui-1.0"
+          ? undefined
+          : "http://localhost:3001/api/copilotkit",
       licenseKey: "ck_pub_00000000000000000000000000000000",
       // The standard components page (/generative-ui/catalog) runs a scripted
       // agent in the browser.
-      agents: { "generative-ui-catalog": new CatalogAgent(shopUI.id) },
+      agents: {
+        "generative-ui-catalog": new CatalogAgent(shopUI.id),
+        [EXPRESS_AGENT_ID]: new ChromeExpressAgent(),
+      },
       renderToolCalls: [
         {
           name: "*",
@@ -46,6 +58,27 @@ export const appConfig: ApplicationConfig = {
         },
       ],
       suggestionsConfig: [
+        {
+          consumerAgentId: EXPRESS_AGENT_ID,
+          available: "always",
+          suggestions: [
+            {
+              title: "A trip planner",
+              message:
+                "Create a trip planning form with a name field and a submit button.",
+            },
+            {
+              title: "A welcome card",
+              message:
+                "Create a welcome card with a title, a short introduction, and a badge.",
+            },
+            {
+              title: "Edit this view",
+              message:
+                "Update the title of the current interface to Ready for adventure. Preserve my input.",
+            },
+          ],
+        },
         {
           consumerAgentId: "a2ui-recovery",
           available: "always",
@@ -63,7 +96,10 @@ export const appConfig: ApplicationConfig = {
         {
           instructions:
             "Suggest follow-up tasks based on the current page content",
-          available: "always",
+          available:
+            globalThis.location?.pathname === "/a2ui-1.0"
+              ? "disabled"
+              : "always",
         },
       ],
       humanInTheLoop: [],
