@@ -24,6 +24,14 @@ export const routes: Routes = [
       ),
   },
   {
+    path: "a2ui-1.0",
+    title: "A2UI 1.0 · Express in Chrome",
+    loadComponent: () =>
+      import("./routes/a2ui-1.0/a2ui-1.0-demo/a2ui-1.0-demo.component").then(
+        (m) => m.A2ui10DemoComponent,
+      ),
+  },
+  {
     path: "generative-ui/catalog",
     title: "Standard components",
     loadComponent: () =>

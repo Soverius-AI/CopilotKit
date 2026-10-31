@@ -61,3 +61,7 @@ packages:
   # harness package imports from it and both use pnpm.
 onlyBuiltDependencies:
   - better-sqlite3
+
+patchedDependencies:
+  "eventsource@3.0.7": "patches/eventsource@3.0.7.patch"
+  "@a2ui/agent@0.0.2": "patches/@a2ui__agent@0.0.2.patch"

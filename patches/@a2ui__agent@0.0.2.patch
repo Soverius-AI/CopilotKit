@@ -1,0 +1,90 @@
+diff --git a/package.json b/package.json
+index 509e763a58e65fb3e3c22d0f4790a4bc2ea4f778..fa8d65a7227b59d2c6653c6388477e2348373215 100644
+--- a/package.json
++++ b/package.json
+@@ -25,6 +25,10 @@
+     ".": {
+       "types": "./src/index.d.ts",
+       "default": "./src/index.js"
++    },
++    "./express": {
++      "types": "./src/inference-formats/express/browser.d.ts",
++      "default": "./src/inference-formats/express/browser.js"
+     }
+   },
+   "type": "module",
+diff --git a/src/inference-formats/express/browser.d.ts b/src/inference-formats/express/browser.d.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..0accd862353ad4c5229a2821c5aa831ac2d70c73
+--- /dev/null
++++ b/src/inference-formats/express/browser.d.ts
+@@ -0,0 +1,2 @@
++export { ExpressParser } from "./parser.js";
++export { ExpressPromptGenerator } from "./prompt-generator.js";
+diff --git a/src/inference-formats/express/browser.js b/src/inference-formats/express/browser.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..0accd862353ad4c5229a2821c5aa831ac2d70c73
+--- /dev/null
++++ b/src/inference-formats/express/browser.js
+@@ -0,0 +1,2 @@
++export { ExpressParser } from "./parser.js";
++export { ExpressPromptGenerator } from "./prompt-generator.js";
+diff --git a/src/inference-formats/express/compiler.js b/src/inference-formats/express/compiler.js
+index 7a4672485f8383111f73a0deb8b4fb6083f098b7..3fc1f597a9fe7df33763196746751ddb4533a9e6 100644
+--- a/src/inference-formats/express/compiler.js
++++ b/src/inference-formats/express/compiler.js
+@@ -496,9 +496,18 @@ export class ExpressCompiler {
+         }
+         // Compile data model paths (compiler.py:401-405)
+         const dataModel = {};
++        const dataUpdates = [];
+         for (const [pathName, astVal] of Object.entries(scope.dataPathAssignments)) {
+             const compiledVal = this._compileValue(astVal, scope.rawSymbols, compIds, ctx, targetMajorMinor, false);
+             setNestedPath(dataModel, pathName, compiledVal);
++            dataUpdates.push(asAgentToRendererMessage({
++                version: targetVersion,
++                updateDataModel: {
++                    surfaceId: scopeSurfId,
++                    path: '/' + pathName.replace(/^\$\/?/, ''),
++                    value: compiledVal,
++                },
++            }));
+         }
+         const compiledComponents = [];
+         for (const [varName, ast] of Object.entries(scope.rawSymbols)) {
+@@ -514,16 +523,7 @@ export class ExpressCompiler {
+         if (scope.update || !hasRootComponent) {
+             if (compiledComponents.length === 0) {
+                 if (Object.keys(scope.dataPathAssignments).length > 0) {
+-                    return [
+-                        asAgentToRendererMessage({
+-                            version: targetVersion,
+-                            [SurfaceOperation.UPDATE_DATA]: {
+-                                surfaceId: scopeSurfId,
+-                                path: '/',
+-                                value: dataModel,
+-                            },
+-                        }),
+-                    ];
++                    return dataUpdates;
+                 }
+                 throw new ExpressUndefinedRootError('root');
+             }
+@@ -534,16 +534,7 @@ export class ExpressCompiler {
+                     components: compiledComponents,
+                 },
+             }));
+-            if (Object.keys(dataModel).length > 0) {
+-                resultMessages.push(asAgentToRendererMessage({
+-                    version: targetVersion,
+-                    [SurfaceOperation.UPDATE_DATA]: {
+-                        surfaceId: scopeSurfId,
+-                        path: '/',
+-                        value: dataModel,
+-                    },
+-                }));
+-            }
++            resultMessages.push(...dataUpdates);
+             return resultMessages;
+         }
+         const createPayload = {

@@ -175,6 +175,7 @@ export class GenerativeUISurfaceManager {
   ) {
     this.webCoreCatalog = new Catalog(
       ui.id,
+      "1.0",
       [...ui.components.keys()].map((name) => ({ name, schema: z.any() })),
       [],
     );

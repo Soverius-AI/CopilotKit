@@ -18,6 +18,7 @@ function makeCustomCatalog(): Catalog<ComponentApi> {
   ];
   return new Catalog<ComponentApi>(
     "copilotkit://custom-catalog",
+    "0.9",
     components,
     [],
   );
@@ -61,6 +62,7 @@ describe("buildCatalogContextValue", () => {
   it("lists only the custom names of a catalog that extends the basic one", () => {
     const catalog = new Catalog<ComponentApi>(
       "copilotkit://extended-catalog",
+      "0.9",
       [
         ...BASIC_COMPONENTS,
         { name: "FlightCard", schema: z.object({ airline: z.string() }) },
@@ -81,6 +83,7 @@ describe("buildCatalogContextValue", () => {
   it("describes the basic catalog the same way regardless of includeSchema", () => {
     const catalog = new Catalog<ComponentApi>(
       A2UI_BASIC_CATALOG_ID,
+      "0.9",
       BASIC_COMPONENTS,
       [],
     );

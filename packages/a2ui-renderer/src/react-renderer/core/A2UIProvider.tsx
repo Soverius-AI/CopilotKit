@@ -1,6 +1,6 @@
 import { createContext, useContext, useRef, useState, useMemo } from "react";
 import type { ReactNode } from "react";
-import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import { MessageProcessor, RELAXED_VALIDATION } from "@a2ui/web_core/v0_9";
 import { basicCatalog } from "../a2ui-react";
 import type { A2UIContextValue, A2UIActions } from "./store";
 import { ThemeProvider } from "../theme/ThemeContext";
@@ -70,6 +70,12 @@ export function A2UIProvider({
           return onActionRef.current(message);
         }
       },
+      {
+        validationConfig: {
+          ...RELAXED_VALIDATION,
+          allowUnknownElements: false,
+        },
+      },
     );
   }
   const processor = processorRef.current;
@@ -79,20 +85,57 @@ export function A2UIProvider({
 
   // Error state for graceful error handling
   const [error, setError] = useState<string | null>(null);
+  const failedOperationKinds = useRef<Set<string>>(new Set());
 
   // Create stable actions object once - stored in ref, never changes
   const actionsRef = useRef<A2UIActions | null>(null);
   if (!actionsRef.current) {
     actionsRef.current = {
       processMessages: (messages: Array<Record<string, unknown>>) => {
+        const kinds = [
+          "createSurface",
+          "updateComponents",
+          "updateDataModel",
+          "deleteSurface",
+        ].filter((kind) => messages.some((message) => kind in message));
         try {
           processor.processMessages(messages as any[]);
         } catch (err) {
           console.warn("[A2UI] processMessages error:", err);
-          setError(err instanceof Error ? err.message : String(err));
+          failedOperationKinds.current = new Set(kinds);
+          const names = messages.flatMap((message) => {
+            const update = message.updateComponents as
+              | { components?: { component?: string }[] }
+              | undefined;
+            return (
+              update?.components?.flatMap((component) =>
+                component.component ? [component.component] : [],
+              ) ?? []
+            );
+          });
+          const detail = err instanceof Error ? err.message : String(err);
+          setError(
+            names.length
+              ? `${[...new Set(names)].join(", ")}: ${detail}`
+              : detail,
+          );
           return;
         }
-        setError(null);
+        // A subsequent data frame cannot repair a rejected component tree.
+        // Retain its diagnostic until that operation is corrected or the
+        // surface lifecycle starts again. Newer web_core rejects it before
+        // a component error boundary can mount.
+        if (
+          kinds.some(
+            (kind) =>
+              failedOperationKinds.current.has(kind) ||
+              kind === "createSurface" ||
+              kind === "deleteSurface",
+          )
+        ) {
+          failedOperationKinds.current.clear();
+          setError(null);
+        }
         setVersion((v) => v + 1);
       },
 

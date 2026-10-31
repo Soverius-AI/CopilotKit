@@ -1,0 +1,231 @@
+<div class="page">
+  <header>
+    <div class="identity">
+      <a href="/generative-ui" aria-label="Back to generative UI">C↗</a>
+      <div>
+        <div class="eyebrow">COPILOTKIT / BROWSER LAB</div>
+        <h1>A2UI <span>1.0</span> Express</h1>
+      </div>
+    </div>
+    <div class="model-controls">
+      <span class="local-badge">● ON DEVICE</span
+      ><button (click)="reset()" [disabled]="running()">Reset</button
+      ><button class="primary" (click)="enable()" [disabled]="!canEnable()">
+        {{
+          debug().availability === "enabled"
+            ? "Model enabled"
+            : "Enable local model"
+        }}
+      </button>
+    </div>
+  </header>
+  <section class="intro">
+    <div>
+      <h2>Describe an interface. Watch it become real.</h2>
+      <p>
+        CopilotKit context + Express examples teach the local model the UI
+        language. Everything runs in your browser.
+      </p>
+    </div>
+    <div class="pipeline">
+      <span>01 · PROMPT</span>→<span>02 · EXPRESS</span>→<span
+        >03 · NATIVE UI</span
+      >
+    </div>
+  </section>
+  <div class="status" role="status" aria-live="polite">
+    <span
+      class="dot"
+      [class.enabled]="debug().availability === 'enabled'"
+    ></span>
+    @switch (debug().availability) {
+      @case ("enabled") {
+        <span
+          >{{ debug().model?.model }} is ready. Send a request in the
+          conversation.</span
+        >
+      }
+      @case ("unsupported") {
+        <span
+          >This browser cannot run the local model. Use a desktop browser with
+          Web Workers and WebAssembly.</span
+        >
+      }
+      @case ("downloadable") {
+        <span
+          >{{ debug().model?.model }} · {{ debug().model?.device }}. Enable the
+          model to download and load its weights.</span
+        >
+      }
+      @case ("downloading") {
+        <span
+          >Preparing the local model…
+          {{ (debug().downloadProgress * 100).toFixed(0) }}%</span
+        >
+      }
+      @case ("available") {
+        <span
+          >{{ debug().model?.model }} is installed. Enable the local model to
+          start a session.</span
+        >
+      }
+      @default {
+        <span>Model: {{ debug().availability }} · {{ debug().stage }}</span>
+      }
+    }
+    @if (debug().model?.fallbackReason) {
+      <span
+        >{{ debug().model?.fallbackReason }} Using Transformers.js
+        locally.</span
+      >
+    }
+    <a
+      [href]="
+        debug().model?.backend === 'transformers'
+          ? 'https://huggingface.co/' + debug().model?.model
+          : 'https://developer.chrome.com/docs/ai/prompt-api'
+      "
+      target="_blank"
+      rel="noreferrer"
+      >Model details ↗</a
+    >
+  </div>
+  <main>
+    <section class="conversation panel" aria-label="CopilotKit conversation">
+      <div class="panel-heading">
+        <span><i>01</i> Conversation</span
+        ><small>{{
+          debug().model?.backend === "transformers"
+            ? "TRANSFORMERS.JS"
+            : "CHROME PROMPT API"
+        }}</small>
+      </div>
+      <copilot-chat [agentId]="agentId" class="chat" />
+    </section>
+    <section class="workbench">
+      <div class="workspace" [class.expanded]="expandedPreview()">
+        <section class="source panel">
+          <div class="panel-heading">
+            <span><i>02</i> Express source</span><small>MODEL OUTPUT</small>
+          </div>
+          <label for="express-source" class="sr-only"
+            >Generated A2UI Express source</label
+          >
+          <textarea
+            id="express-source"
+            spellcheck="false"
+            [value]="debug().dsl"
+            readonly
+            placeholder="The local model’s Express response will appear here."
+          ></textarea>
+          <div class="editor-footer">
+            <span
+              >{{ debug().dsl.length }} characters · A2UI v1.0 candidate</span
+            ><span>Compiled automatically after generation</span>
+          </div>
+        </section>
+        <section class="preview panel">
+          <div class="panel-heading">
+            <span><i>03</i> Native preview</span>
+            <button
+              class="preview-toggle"
+              (click)="expandedPreview.set(!expandedPreview())"
+              [attr.aria-expanded]="expandedPreview()"
+            >
+              {{ expandedPreview() ? "Show editor" : "Expand preview" }}
+            </button>
+          </div>
+          <div class="preview-canvas">
+            <copilot-generative-ui-surface
+              id="express-preview"
+              description="The live preview next to the Express editor. Render every interface here."
+              [components]="components"
+              [autoScroll]="false"
+              ><div class="empty-preview">
+                <div class="braces">&#123; &#125;</div>
+                <h3>Your interface appears here</h3>
+                <p>
+                  Enable the local model and describe the interface you want to
+                  generate.
+                </p>
+              </div></copilot-generative-ui-surface
+            >
+          </div>
+          <div class="preview-footer">
+            <span
+              >Native components · reactive bindings · model-generated UI</span
+            >
+          </div>
+        </section>
+      </div>
+      <section class="debug panel" aria-label="Agent state debugger">
+        <div class="debug-heading">
+          <div class="tabs" role="group" aria-label="Debug view">
+            <button
+              [class.selected]="tab() === 'operations'"
+              (click)="tab.set('operations')"
+            >
+              Compiled JSON</button
+            ><button
+              [class.selected]="tab() === 'prompt'"
+              (click)="tab.set('prompt')"
+            >
+              System prompt</button
+            ><button
+              [class.selected]="tab() === 'state'"
+              (click)="tab.set('state')"
+            >
+              Agent state</button
+            ><button
+              [class.selected]="tab() === 'data'"
+              (click)="tab.set('data')"
+            >
+              Form data
+            </button>
+          </div>
+          <div class="run-status">
+            <span>{{ debug().stage }}</span
+            ><small>
+              @if (debug().source === "model" && debug().attempt) {
+                Try {{ debug().attempt }}/3 ·
+              }
+              {{ debug().elapsedMs }} ms · compile
+              {{ debug().compileMs }} ms</small
+            >
+            @if (running() || debug().modelStarting) {
+              <button (click)="stop()">Stop</button>
+            }
+          </div>
+        </div>
+        @if (debug().diagnostics.length) {
+          <div class="diagnostics" role="alert">
+            @for (diagnostic of debug().diagnostics; track $index) {
+              <p>{{ diagnostic }}</p>
+            }
+          </div>
+        }
+        @switch (tab()) {
+          @case ("operations") {
+            <pre>{{ debug().operations | json }}</pre>
+          }
+          @case ("prompt") {
+            <pre>{{
+              debug().systemPrompt ||
+                "Loading the catalog and Express contract…"
+            }}</pre>
+          }
+          @case ("state") {
+            <pre>{{ debug() | json }}</pre>
+          }
+          @case ("data") {
+            <pre>{{ formData() | json }}</pre>
+          }
+        }
+        <div class="debug-footer">
+          DSL and diagnostics arrive through AG-UI agent state. Validated
+          operations render through CopilotKit surface activities.
+        </div>
+      </section>
+    </section>
+  </main>
+</div>

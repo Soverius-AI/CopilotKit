@@ -579,7 +579,11 @@ function SurfaceMessageProcessor({
       : operations;
 
     // Error handling is done inside A2UIProvider.processMessages
-    processMessages(ops);
+    // Older payloads sometimes repeated surfaceId on the envelope. The nested
+    // operation is authoritative; newer web_core rejects that extra field.
+    processMessages(
+      ops.map(({ surfaceId: _legacySurfaceId, ...operation }) => operation),
+    );
 
     // Signal the cross-over to swap ONLY once the surface can actually paint a
     // card. A data-bound list renders nothing until its data model arrives, so

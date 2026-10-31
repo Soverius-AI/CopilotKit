@@ -13,11 +13,17 @@ import { provideGenerativeUIIcons } from "@copilotkit/angular/generative-ui/icon
 import { provideGenerativeUIMap } from "@copilotkit/angular/generative-ui/map";
 import { shopUI } from "./routes/generative-ui/shop-ui";
 import { CatalogAgent } from "./routes/generative-ui/catalog-agent";
+import {
+  ChromeExpressAgent,
+  EXPRESS_AGENT_ID,
+} from "./routes/a2ui-1.0/chrome-express-agent";
 import { WildcardToolRenderComponent } from "./components/wildcard-tool-render.component";
 import { a2uiDemoSandboxFunctions } from "./routes/a2ui/a2ui-demo-sandbox-functions";
 import { dashboardCatalog } from "./routes/a2ui-angular/dashboard-catalog";
 import { routes } from "./app.routes";
 import { z } from "zod";
+
+const browserInferenceRoute = globalThis.location?.pathname === "/a2ui-1.0";
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -33,11 +39,18 @@ export const appConfig: ApplicationConfig = {
     provideGenerativeUIIcons(),
     provideGenerativeUIMap(),
     provideCopilotKit({
-      runtimeUrl: "http://localhost:3001/api/copilotkit",
+      // This route's self-managed agent needs no server. Reload when leaving
+      // its standalone browser session to restore the other demos' runtime.
+      runtimeUrl: browserInferenceRoute
+        ? undefined
+        : "http://localhost:3001/api/copilotkit",
       licenseKey: "ck_pub_00000000000000000000000000000000",
       // The standard components page (/generative-ui/catalog) runs a scripted
       // agent in the browser.
-      agents: { "generative-ui-catalog": new CatalogAgent(shopUI.id) },
+      agents: {
+        "generative-ui-catalog": new CatalogAgent(shopUI.id),
+        [EXPRESS_AGENT_ID]: new ChromeExpressAgent(),
+      },
       renderToolCalls: [
         {
           name: "*",
@@ -46,6 +59,27 @@ export const appConfig: ApplicationConfig = {
         },
       ],
       suggestionsConfig: [
+        {
+          consumerAgentId: EXPRESS_AGENT_ID,
+          available: "always",
+          suggestions: [
+            {
+              title: "Shopping inputs",
+              message:
+                "Create a simple Leaf & Light checkout card with Total $53. Include eight bound controls: Name, Email, Street, City, Country dropdown with Austria and Germany, Delivery dropdown with Standard and Express, Gift wrapping checkbox, and Delivery notes. Initialize all eight paths. Add a Review order Button with a review_order Event containing all eight paths. Put controls in a flat children list. Use no Form, no nested arrays, no Spacer, and no weight, wrap, or alignment arguments. Style only the Title dark green. Use the exact declared component signatures.",
+            },
+            {
+              title: "Welcome card",
+              message:
+                "Create the Leaf & Light welcome card. Use one flat array for the Card children: never put an array inside that array. Use only a Card, a Title, three Text components, and a Badge. Include New arrivals, a sentence about indoor plants, Free shipping over $50, and Vienna pickup available. Use a calm green accent and keep it compact.",
+            },
+            {
+              title: "Edit this view",
+              message:
+                "Update the title of the current interface to Ready for adventure. Preserve my input.",
+            },
+          ],
+        },
         {
           consumerAgentId: "a2ui-recovery",
           available: "always",
@@ -63,13 +97,19 @@ export const appConfig: ApplicationConfig = {
         {
           instructions:
             "Suggest follow-up tasks based on the current page content",
-          available: "always",
+          available: browserInferenceRoute ? "disabled" : "always",
         },
       ],
       humanInTheLoop: [],
-      openGenerativeUI: { sandboxFunctions: a2uiDemoSandboxFunctions },
+      // The legacy demos register their own JSON schemas and generation
+      // instructions as agent context. Express already has a focused catalog
+      // in its system prompt; those unrelated contracts exceed Nano's budget
+      // and tell it to emit a different protocol.
+      openGenerativeUI: browserInferenceRoute
+        ? undefined
+        : { sandboxFunctions: a2uiDemoSandboxFunctions },
       // Render A2UI with the basic catalog plus the dashboard components.
-      a2ui: { catalog: dashboardCatalog },
+      a2ui: browserInferenceRoute ? undefined : { catalog: dashboardCatalog },
     }),
     provideCopilotChatLabels({
       chatInputPlaceholder: "Ask me anything...",

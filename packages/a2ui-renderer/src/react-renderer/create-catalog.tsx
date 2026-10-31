@@ -155,6 +155,7 @@ export function createCatalog<D extends CatalogDefinitions>(
 
   return new Catalog<ReactComponentImplementation>(
     catalogId,
+    "0.9",
     allComponents,
     functions,
   );

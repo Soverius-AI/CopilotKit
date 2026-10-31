@@ -38,3 +38,79 @@ passed 227 tests in 11 files, including six new management tests.
 Changed-file `pnpm exec oxlint` passed with no warnings or errors.
 Docs examples and limits were checked against both SDK and companion API source.
 Live backend acceptance remains a separate preview-delivery gate.
+
+## A2UI 1.0 Express with Chrome browser inference
+
+**Status:** Implemented and verified with native Chrome inference and a real Transformers.js WebGPU fallback. Manual UI execution was removed following the user’s refinement. Model compliance remains variable for larger forms.
+**Branch:** `demo/a2ui-1.0`, created from freshly fetched `origin/main` at `bbc3f036cd`.
+**Worktree:** `/Users/wolfmanfx/Dev/CopilotKit-a2ui-1.0`.
+
+**Goal:** Add `/a2ui-1.0` to the existing Angular demo app. A natural-language request runs through Chrome's built-in Prompt API (Gemini Nano), produces A2UI Express, compiles locally into A2UI v1.0 operations, and renders through CopilotKit's native Angular generative UI. Show the full process and user interactions in the browser. Inference and compilation must not depend on the demo server or a cloud API key.
+
+**User refinement:** Use CopilotKit's prompt/context machinery, teach Express through in-context examples in the model's system prompt, and expose the generated DSL as agent state for debugging. The demo should exercise a real local CopilotKit agent, rather than a separate inference playground that bypasses CopilotKit.
+
+### Confirmed scope and findings
+
+- The user selected an Angular demo route rather than a standalone example, requested Chrome Prompt API inference, and authorized a branch for dependency updates.
+- The app uses Angular 22 and already configures `@copilotkit/angular/generative-ui`. Its catalog exporter produces v1.0 schemas and preserves Express parameter order.
+- The published `@a2ui/agent` SDK is currently `0.0.2`, depends on `@a2ui/web_core` `^0.14.0`, and publicly exposes `ExpressParser`, `ExpressPromptGenerator`, and `ExpressFormatFactory`. The repo currently pins `web_core` to `0.10.4`; compatibility and dependency updates are an explicit first milestone.
+- The SDK main entry also loads Node filesystem catalog/skill helpers. A pinned patch exposes only the browser-safe Express compiler and prompt generator; the Angular browser build and real compile/render round trip pass.
+- Upstream currently calls A2UI v1.0 a release candidate. Label the demo accurately.
+- Nx MCP tools are unavailable in this session. Nx CLI project inspection confirmed the existing `@copilotkit/angular-demo` build/dev targets; use Nx for implementation checks.
+
+### Agreed architecture to implement
+
+1. Register a browser-local `AbstractAgent` for this route. CopilotKit owns conversation runs, context, user actions, and the generative UI envelope, as with the existing local catalog agent.
+2. Read the current run's catalog, targets, existing surfaces, action, and application context from CopilotKit. Compose the Chrome session's system prompt from CopilotKit's UI guidance plus the official catalog-derived Express language contract and a small set of valid request/Express examples. Keep conversation messages and user-entered values as run input rather than instructions. This is in-context learning, not model training.
+3. Make Express an explicit output mode in prompt composition: preserve CopilotKit's behavioral guidance, but replace instructions to call `render_ui` with JSON with instructions to emit Express. Do not concatenate contradictory JSON/tool and DSL output contracts or patch generated prompt text using fragile string replacements. If shared prompt composition needs an option, keep the existing default behavior unchanged and cover both modes.
+4. Pass that system prompt to Chrome's `LanguageModel.create({ initialPrompts: [...] })`, then stream the response through `promptStreaming()`. Recreate/rebase the session when its system contract changes, and choose one conversation-history owner so follow-ups do not duplicate previous turns.
+5. Compile the Express locally with the official SDK, validate the resulting operations, and emit the existing `generative-ui-surface` activity events. CopilotKit's renderer remains the authority for the UI, bindings, and actions.
+6. Publish a namespaced debug object under agent state, for example `state.a2uiExpress = { runId, surfaceId, stage, dsl, operations, diagnostics, timings }`. Initialize it with `STATE_SNAPSHOT` while preserving other state fields; publish bounded/throttled `STATE_DELTA` JSON patches as generation progresses. The page reads it through `injectAgentStore(agentId).state()`. Track cancellation/failure as well as success, and bound any retained history. Debug state is separate from the surface data model and is not automatically copied back into the next model prompt.
+7. Offer the exact composed system prompt in a debug view, alongside the DSL, operations, and diagnostics, so it is possible to inspect what the model was taught and what the compiler accepted. Do not require the debug payload to render the UI or send full snapshots for every generated token.
+
+### Implementation sequence
+
+- [x] **Prove the browser toolchain and update dependencies.** Add the official Express SDK to the demo and Prompt API TypeScript types. Audit A2UI consumers and update the required `web_core` dependency declarations and lockfile consistently where compatibility requires it. Bundle the SDK in Angular and compile a small Express sample against a catalog exported from the same UI used by the preview. Validate the v1.0 output and render it with the existing engine, including a bound input and an event. Resolve any schema/API mismatch here before building the full page; use the official parser rather than inventing a partial DSL implementation.
+- [x] **Compose the CopilotKit + Express system prompt.** Reuse the run envelope and shared prompt machinery for catalog/context/target/surface behavior. Add the explicit Express output contract and valid few-shot examples through structured prompt composition. Show the resulting system prompt in the debug view and verify it does not also request raw JSON/tool output.
+- [x] **Add the local CopilotKit agent and Chrome inference adapter.** Feature-detect `LanguageModel`, check availability using the same text/language options as session creation, and expose unavailable/downloadable/downloading/ready/generating/error states. Create/download the session from an explicit user gesture with progress. Use the composed system prompt and `promptStreaming()`, support cancellation, and destroy sessions on reset/navigation. Keep context bounded for Gemini Nano with a focused catalog and a few examples. Carry conversations and user actions through CopilotKit, compile the DSL, and emit the standard surface activity events. Do not silently route unsupported browsers to cloud inference.
+- [x] **Publish debug agent state.** Emit a namespaced initial snapshot and throttled JSON-patch deltas containing the latest DSL, operations, compilation diagnostics, run identifiers, stage, and timings. Preserve unrelated agent state, guard against stale updates, and keep debug data out of model context unless explicitly selected. Show the values from the agent store rather than maintaining a second authoritative copy in the page.
+- [x] **Build `/a2ui-1.0`.** Add a lazy route and a responsive page using CopilotKit conversation UI, example prompts, enable/download, generate, stop, reset, and compile-edited-source controls. Show streamed/editable Express source, compiled JSON, the system prompt, native Angular preview, and a data/action log. Explain the stages in the page: CopilotKit context + Express examples -> Gemini Nano -> Express -> v1.0 operations -> native components. Lazy-load the compiler so other demo routes do not pay its startup cost.
+- [x] **Demonstrate useful behavior.** Include a simple card/layout, a form with two-way bindings and a submit event, and an existing-surface update. Keep complete, editable Express presets available and explicitly label preset execution separately from real model generation. Show local data-model changes immediately. Feed submitted actions and current surface context into the local model for an updated response, using the same compilation/render path.
+- [x] **Handle streaming and errors.** Show raw model text as it arrives; only apply complete, validated operations supported by the SDK's streaming contract. Initially accept the completed response if progressive compilation cannot be proven correct. Preserve the last valid preview on syntax/schema errors, display useful diagnostics, and prevent cancelled or superseded generations from updating it. Give unsupported browsers a setup explanation while allowing manual preset compilation.
+- [x] **Verify and document.** Add focused behavior checks for prompt composition/output modes, debug state propagation, the browser adapter lifecycle, cancellation/stale results, invalid DSL, and compile-to-render bindings/actions. Run `pnpm exec nx run @copilotkit/angular-demo:build` and affected package checks for any dependency/API changes. Verify the real Prompt API in eligible desktop Chrome on localhost, including download/availability, generation, editing, form actions, updates, stop/reset, and page cleanup. Inspect desktop/mobile layouts and browser console/network behavior. Distinguish mock coverage from actual local-model evidence; if Chrome/device support blocks live inference, report that limitation explicitly. Add local setup and usage instructions with current Chrome requirements and no API-key requirement.
+- [x] **Deliver in logical commits.** Commit tests with their implementation, push each completed unit to `origin/demo/a2ui-1.0`, and provide launch instructions and evidence. Keep the feature in this worktree for review.
+
+### Acceptance criteria
+
+1. An eligible Chrome user opens `/a2ui-1.0`, enables the local model, enters a request, and sees real model-generated Express, valid v1.0 JSON, and native Angular UI.
+2. All inference and compilation execute in the browser; the demo feature requires no remote model credential or backend compilation endpoint.
+3. A form input changes the surface data model, its action appears in the log, and the local model can respond with a surface update.
+4. Manual Express edits and presets use the same official compiler/render path. Unsupported-device, download, cancellation, and invalid-output states are visible and recoverable.
+5. Necessary dependency upgrades pass their affected checks and existing demo routes still build.
+6. The local agent receives a CopilotKit-derived system prompt that teaches Express with examples. The debug panel exposes that prompt and reads generated DSL/compilation status from AG-UI agent state; UI rendering uses the compiled surface activities.
+
+### Primary references
+
+- Chrome Prompt API: https://developer.chrome.com/docs/ai/prompt-api
+- Chrome built-in AI setup: https://developer.chrome.com/docs/ai/get-started
+- Express specification: https://a2ui.org/specification/proposals/express/a2ui_express/
+- Official TypeScript SDK: https://github.com/a2ui-project/a2ui/tree/main/typescript/agents/a2ui_agent
+- A2UI v1.0 candidate: https://a2ui.org/specification/v1.0-a2ui/
+
+A2UI demo validation (2026-10-31):
+
+- Upgraded all workspace A2UI web_core consumers to 0.14.0, without aliases; retained legacy v0.9 protocols in their catalogs and v1.0 in the native surface engine.
+- Required commit hooks ran test, publint, and attw across 27 affected projects successfully after compatibility fixes and local native SQLite dependency setup.
+- Angular demo Nx build and 11 compiler/agent/adapter tests passed. Core generative UI coverage passed 161 tests; the legacy Angular streaming regression set passed 42 tests.
+- Real Chrome browser checks: native form rendering, two-way input, targeted update preserving the input, action payload in agent state, invalid DSL preserving the preview, and reset. Browser console had no errors on the standalone route.
+- Desktop and mobile screenshots are under output/playwright/. Real Prompt API availability was checked in two Chrome profiles, including one allowing model downloads; both reported unavailable. No generated preset was presented as a model inference result.
+
+## Browser-model fallback and generated-only demo
+
+User direction: remove manually authored UI execution; when Chrome Prompt API is absent or unavailable, load an LLM with Transformers.js in the browser.
+
+- [x] Add a lazy Web Worker Transformers.js adapter with model download progress, streaming, cancellation and disposal; choose it automatically when the native API is unavailable.
+- [x] Remove preset rendering, edited-source compilation and canned form acknowledgements from the demo. Keep few-shot DSL only as model teaching context and compiler test fixtures.
+- [x] Expose the selected engine/model and loading state through AG-UI; preserve official Express compilation and native Angular rendering.
+- [x] Test native selection and fallback, worker cancellation and failures, and real Chrome generation with the native API disabled. Verify actual input/action flow and capture model-produced results.
+- [x] Update setup/results documentation, commit logical changes and push.

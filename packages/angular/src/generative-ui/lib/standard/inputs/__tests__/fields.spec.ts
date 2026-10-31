@@ -195,6 +195,30 @@ describe("standard inputs: values", () => {
     expect(view.container.textContent).toContain("12 users");
   });
 
+  it("initializes a Slider outside the browser's default 0–100 range without clamping its bound value", () => {
+    const view = renderInputs(
+      [
+        {
+          id: "root",
+          component: "Slider",
+          label: "Budget",
+          unit: "USD",
+          value: { "@path": "/budget" },
+          min: 500,
+          max: 10000,
+          step: 500,
+        },
+      ],
+      { budget: 2500 },
+    );
+    const range = byLabel<HTMLInputElement>(view.container, "Budget");
+    expect(range.valueAsNumber).toBe(2500);
+    expect(view.dataAt("/budget")).toBe(2500);
+    expect(view.container.textContent).toContain("2500 USD");
+    setValue(view, range, "4500");
+    expect(view.dataAt("/budget")).toBe(4500);
+  });
+
   it("writes a DateTimeInput date and clears it with the clear button", () => {
     const view = renderInputs(
       [

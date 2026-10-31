@@ -184,7 +184,8 @@
       "path-to-regexp@>=8.0.0 <8.4.0": ">=8.4.0"
     },
     "patchedDependencies": {
-      "eventsource@3.0.7": "patches/eventsource@3.0.7.patch"
+      "eventsource@3.0.7": "patches/eventsource@3.0.7.patch",
+      "@a2ui/agent@0.0.2": "patches/@a2ui__agent@0.0.2.patch"
     }
   }
 }
