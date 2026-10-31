@@ -37,6 +37,71 @@ async function configured(model = new TestModel()) {
 }
 
 describe("browser-local CopilotKit agent", () => {
+  it("returns compiler feedback to the model and renders only the repaired response", async () => {
+    class RepairModel extends TestModel {
+      inputs: string[] = [];
+      override async *generate(
+        input: string,
+        prompt: string,
+        signal: AbortSignal,
+      ) {
+        signal.throwIfAborted();
+        expect(prompt).toBe(this.enabledPrompt);
+        this.inputs.push(input);
+        yield this.inputs.length === 1
+          ? 'root = Badge("Local model", color="green")'
+          : this.output;
+      }
+    }
+    const model = new RepairModel();
+    const { agent } = await configured(model);
+    await agent.enable();
+    const publishedAt: number[] = [];
+    await agent.runAgent(
+      {},
+      {
+        onActivitySnapshotEvent: () => {
+          publishedAt.push(model.inputs.length);
+        },
+      },
+    );
+    expect(model.inputs).toHaveLength(2);
+    expect(JSON.parse(model.inputs[1]!).repair).toMatchObject({
+      rejectedExpress: 'root = Badge("Local model", color="green")',
+      compilerDiagnostic: expect.stringContaining("color"),
+    });
+    expect(publishedAt).toEqual([2]);
+    expect(agent.debugState.attempt).toBe(2);
+    expect(agent.debugState.compilerFeedback).toHaveLength(1);
+    expect(agent.debugState.stage).toBe("ready");
+    expect(agent.debugState.diagnostics).toEqual([]);
+  });
+
+  it("stops after three invalid model responses and keeps the previous valid preview", async () => {
+    class InvalidModel extends TestModel {
+      calls = 0;
+      override async *generate() {
+        ++this.calls;
+        yield 'root = Unknown("invalid")';
+      }
+    }
+    const model = new InvalidModel();
+    const { agent } = await configured(model);
+    agent.useManualSource(EXPRESS_PRESETS.card);
+    await agent.runAgent();
+    const previous = agent.messages.filter(
+      (message) => message.role === "activity",
+    );
+    await agent.enable();
+    await agent.runAgent();
+    expect(model.calls).toBe(3);
+    expect(agent.debugState.stage).toBe("error");
+    expect(agent.debugState.compilerFeedback).toHaveLength(3);
+    expect(
+      agent.messages.filter((message) => message.role === "activity"),
+    ).toEqual(previous);
+  });
+
   it.each([
     [
       "shopping",

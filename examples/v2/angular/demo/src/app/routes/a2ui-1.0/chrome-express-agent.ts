@@ -35,6 +35,8 @@ export interface ExpressDebugState {
   lastSuccessfulDsl: string;
   operations: A2UIOperation[];
   diagnostics: string[];
+  attempt: number;
+  compilerFeedback: string[];
   elapsedMs: number;
   compileMs: number;
   action: unknown;
@@ -53,6 +55,8 @@ export const initialDebugState = (): ExpressDebugState => ({
   lastSuccessfulDsl: "",
   operations: [],
   diagnostics: [],
+  attempt: 0,
+  compilerFeedback: [],
   elapsedMs: 0,
   compileMs: 0,
   action: null,
@@ -221,6 +225,8 @@ export class ChromeExpressAgent extends AbstractAgent {
               dsl: "",
               operations: [],
               diagnostics: [],
+              attempt: 0,
+              compilerFeedback: [],
               elapsedMs: 0,
               compileMs: 0,
               action,
@@ -230,13 +236,12 @@ export class ChromeExpressAgent extends AbstractAgent {
         try {
           if (!this.#compiler || !manifest)
             throw new Error("The Express catalog is still loading.");
-          let dsl = source ?? "";
+          let requestData: Record<string, unknown> | undefined;
           if (source === undefined) {
             if (!this.#modelReady)
               throw new Error(
                 "Enable Chrome's local model first. You can also compile a preset without inference.",
               );
-            let lastPublished = 0;
             // Surface data and application context are run data, never system instructions.
             // Bounded recent turns avoid duplicating an unbounded Chrome session history.
             const turns = input.messages
@@ -250,7 +255,7 @@ export class ChromeExpressAgent extends AbstractAgent {
                 role: m.role,
                 content: String(m.content).slice(-3000),
               }));
-            const runData = JSON.stringify({
+            requestData = {
               conversation: turns,
               context: input.context,
               surfaces: manifest.surfaces,
@@ -259,34 +264,77 @@ export class ChromeExpressAgent extends AbstractAgent {
               newSurfaceId: surfaceId,
               instruction:
                 "Reply with an <a2ui> Express block. Omit surface(...) for a new view; the host selects newSurfaceId. To update an existing view, use its id with surface(id, update=true).",
+            };
+          }
+          let dsl = "";
+          let operations: A2UIOperation[] = [];
+          let compileStarted = performance.now();
+          let rejectedDsl = "";
+          const compilerFeedback: string[] = [];
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            controller.signal.throwIfAborted();
+            dsl = source ?? "";
+            patch({
+              attempt,
+              stage: source === undefined ? "generating" : "compiling",
+              dsl,
             });
-            if (runData.length > 28_000)
-              throw new Error(
-                "The local model context is too large. Reset the demo to start a smaller conversation.",
-              );
-            for await (const chunk of this.model.generate(
-              runData,
-              this.debugState.systemPrompt,
-              controller.signal,
-            )) {
-              dsl += chunk;
-              if (dsl.length > 60_000)
+            if (requestData) {
+              const runData = JSON.stringify({
+                ...requestData,
+                ...(compilerFeedback.length
+                  ? {
+                      repair: {
+                        rejectedExpress: rejectedDsl.slice(0, 12_000),
+                        compilerDiagnostic: compilerFeedback.at(-1),
+                        instruction:
+                          "Repair the rejected Express using this diagnostic and the catalog. Return a complete corrected <a2ui> block. Keep the original requested interface. Do not explain the correction.",
+                      },
+                    }
+                  : {}),
+              });
+              if (runData.length > 28_000)
                 throw new Error(
-                  "Model output exceeded the demo limit. Try a smaller interface.",
+                  "The local model context is too large. Reset the demo to start a smaller conversation.",
                 );
-              if (performance.now() - lastPublished > 80) {
-                patch({
-                  dsl,
-                  elapsedMs: Math.round(performance.now() - started),
-                });
-                lastPublished = performance.now();
+              let lastPublished = 0;
+              for await (const chunk of this.model.generate(
+                runData,
+                this.debugState.systemPrompt,
+                controller.signal,
+              )) {
+                dsl += chunk;
+                if (dsl.length > 60_000)
+                  throw new Error(
+                    "Model output exceeded the demo limit. Try a smaller interface.",
+                  );
+                if (performance.now() - lastPublished > 80) {
+                  patch({
+                    dsl,
+                    elapsedMs: Math.round(performance.now() - started),
+                  });
+                  lastPublished = performance.now();
+                }
               }
             }
+            controller.signal.throwIfAborted();
+            patch({ dsl, stage: "compiling" });
+            compileStarted = performance.now();
+            try {
+              operations = this.#compiler.compile(dsl, surfaceId, manifest);
+              break;
+            } catch (error) {
+              if (source !== undefined) throw error;
+              const diagnostic = errorMessage(error);
+              compilerFeedback.push(`Attempt ${attempt}: ${diagnostic}`);
+              rejectedDsl = dsl;
+              patch({
+                compilerFeedback: [...compilerFeedback],
+                diagnostics: [diagnostic],
+              });
+              if (attempt === 3) throw error;
+            }
           }
-          controller.signal.throwIfAborted();
-          patch({ dsl, stage: "compiling" });
-          const compileStarted = performance.now();
-          const operations = this.#compiler.compile(dsl, surfaceId, manifest);
           controller.signal.throwIfAborted();
           // Publish only after the entire response compiles and validates, so a
           // malformed response cannot destroy the last good preview.
@@ -349,6 +397,7 @@ export class ChromeExpressAgent extends AbstractAgent {
             : `${this.debugState.lastSuccessfulDsl}\n${dsl}`.slice(-12_000);
           patch({
             stage: "ready",
+            diagnostics: [],
             dsl,
             lastSuccessfulDsl,
             operations,

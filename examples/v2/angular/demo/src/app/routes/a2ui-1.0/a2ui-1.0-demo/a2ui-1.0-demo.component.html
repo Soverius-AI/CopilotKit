@@ -50,8 +50,8 @@
       }
       @case ("unavailable") {
         <span
-          >Chrome reports that this device cannot run the model. Presets and the
-          compiler remain available.</span
+          >Chrome cannot make the local model available in this session. Check
+          Chrome setup below. Presets and the compiler remain available.</span
         >
       }
       @case ("downloadable") {
@@ -199,8 +199,11 @@
           </div>
           <div class="run-status">
             <span>{{ debug().stage }}</span
-            ><small
-              >{{ debug().elapsedMs }} ms · compile
+            ><small>
+              @if (debug().source === "model" && debug().attempt) {
+                Try {{ debug().attempt }}/3 ·
+              }
+              {{ debug().elapsedMs }} ms · compile
               {{ debug().compileMs }} ms</small
             >
             @if (running()) {

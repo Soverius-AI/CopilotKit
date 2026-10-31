@@ -23,6 +23,8 @@ import { dashboardCatalog } from "./routes/a2ui-angular/dashboard-catalog";
 import { routes } from "./app.routes";
 import { z } from "zod";
 
+const browserInferenceRoute = globalThis.location?.pathname === "/a2ui-1.0";
+
 export const appConfig: ApplicationConfig = {
   providers: [
     importProvidersFrom(BrowserModule),
@@ -39,10 +41,9 @@ export const appConfig: ApplicationConfig = {
     provideCopilotKit({
       // This route's self-managed agent needs no server. Reload when leaving
       // its standalone browser session to restore the other demos' runtime.
-      runtimeUrl:
-        globalThis.location?.pathname === "/a2ui-1.0"
-          ? undefined
-          : "http://localhost:3001/api/copilotkit",
+      runtimeUrl: browserInferenceRoute
+        ? undefined
+        : "http://localhost:3001/api/copilotkit",
       licenseKey: "ck_pub_00000000000000000000000000000000",
       // The standard components page (/generative-ui/catalog) runs a scripted
       // agent in the browser.
@@ -96,16 +97,19 @@ export const appConfig: ApplicationConfig = {
         {
           instructions:
             "Suggest follow-up tasks based on the current page content",
-          available:
-            globalThis.location?.pathname === "/a2ui-1.0"
-              ? "disabled"
-              : "always",
+          available: browserInferenceRoute ? "disabled" : "always",
         },
       ],
       humanInTheLoop: [],
-      openGenerativeUI: { sandboxFunctions: a2uiDemoSandboxFunctions },
+      // The legacy demos register their own JSON schemas and generation
+      // instructions as agent context. Express already has a focused catalog
+      // in its system prompt; those unrelated contracts exceed Nano's budget
+      // and tell it to emit a different protocol.
+      openGenerativeUI: browserInferenceRoute
+        ? undefined
+        : { sandboxFunctions: a2uiDemoSandboxFunctions },
       // Render A2UI with the basic catalog plus the dashboard components.
-      a2ui: { catalog: dashboardCatalog },
+      a2ui: browserInferenceRoute ? undefined : { catalog: dashboardCatalog },
     }),
     provideCopilotChatLabels({
       chatInputPlaceholder: "Ask me anything...",

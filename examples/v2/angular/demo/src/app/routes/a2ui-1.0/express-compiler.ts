@@ -63,7 +63,9 @@ email = TextField("Work email", $/email, checks=[{condition: email(value=$/email
 root = Card([Title("Tell us about your project"), budget, summary, email])
 </a2ui>
 
-For arithmetic with named variables, use calc inside formatString interpolation; the renderer resolves its variables from paths. The calc constructor itself accepts only its declared expression parameter. In event context, pass data paths rather than function calls. Use Form with a submit=true Button for native browser form validation.`;
+For arithmetic with named variables, use calc inside formatString interpolation; the renderer resolves its variables from paths. The calc constructor itself accepts only its declared expression parameter. In event context, pass data paths rather than function calls. Use Form with a submit=true Button for native browser form validation.
+
+Express syntax reminders: constructor arguments use name=value. An array of children contains only component expressions or component variable names, never JSON property entries such as "span": 2. Use only declared parameters. Badge color is one of secondary, success, danger, warning, info, discovery; omit it for a neutral badge. A custom hex color can be used on Title or Text.`;
   const guide = new ExpressPromptGenerator([selected], {
     [selected.id]: examples,
   }).generate();
