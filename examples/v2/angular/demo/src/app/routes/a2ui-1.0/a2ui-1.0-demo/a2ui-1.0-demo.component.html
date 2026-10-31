@@ -23,8 +23,8 @@
     <div>
       <h2>Describe an interface. Watch it become real.</h2>
       <p>
-        CopilotKit context + Express examples teach Gemini Nano the UI language.
-        Everything runs in your browser.
+        CopilotKit context + Express examples teach Chrome’s local model the UI
+        language. Everything runs in your browser.
       </p>
     </div>
     <div class="pipeline">
@@ -40,7 +40,10 @@
     ></span>
     @switch (debug().availability) {
       @case ("enabled") {
-        <span>Gemini Nano is ready. Send a request in the conversation.</span>
+        <span
+          >Chrome’s local model is ready. Send a request in the
+          conversation.</span
+        >
       }
       @case ("unsupported") {
         <span
@@ -56,19 +59,19 @@
       }
       @case ("downloadable") {
         <span
-          >Enable the local model to download Gemini Nano. Chrome manages the
-          download.</span
+          >Enable the local model to download its local model. Chrome manages
+          the download.</span
         >
       }
       @case ("downloading") {
         <span
-          >Preparing Gemini Nano…
+          >Preparing the local model…
           {{ (debug().downloadProgress * 100).toFixed(0) }}%</span
         >
       }
       @case ("available") {
         <span
-          >Gemini Nano is installed. Enable the local model to start a
+          >The local model is installed. Enable the local model to start a
           session.</span
         >
       }
@@ -155,8 +158,8 @@
                 <div class="braces">&#123; &#125;</div>
                 <h3>Your interface appears here</h3>
                 <p>
-                  Enable Gemini Nano and describe a UI, or compile a preset to
-                  explore Express.
+                  Enable the local model and describe a UI, or compile a preset
+                  to explore Express.
                 </p>
               </div></copilot-generative-ui-surface
             >

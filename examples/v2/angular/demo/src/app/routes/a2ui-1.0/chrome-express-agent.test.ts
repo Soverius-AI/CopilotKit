@@ -66,10 +66,13 @@ describe("browser-local CopilotKit agent", () => {
       },
     );
     expect(model.inputs).toHaveLength(2);
-    expect(JSON.parse(model.inputs[1]!).repair).toMatchObject({
-      rejectedExpress: 'root = Badge("Local model", color="green")',
-      compilerDiagnostic: expect.stringContaining("color"),
-    });
+    expect(JSON.parse(model.inputs[1]!).conversation.slice(-2)).toEqual([
+      {
+        role: "assistant",
+        content: 'root = Badge("Local model", color="green")',
+      },
+      { role: "user", content: expect.stringContaining("color") },
+    ]);
     expect(publishedAt).toEqual([2]);
     expect(agent.debugState.attempt).toBe(2);
     expect(agent.debugState.compilerFeedback).toHaveLength(1);

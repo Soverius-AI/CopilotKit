@@ -57,6 +57,8 @@ describe("the official Express compiler with a CopilotKit catalog", () => {
     expect(prompt).toContain("TextField(");
     expect(prompt).toContain("Plan your next adventure");
     expect(prompt).not.toContain("render_ui");
+    expect(prompt.length).toBeLessThan(18_000);
+    expect(prompt).toContain("Form([name, email, country");
   });
 
   it("compiles a targeted update without creating another surface", async () => {
@@ -82,6 +84,13 @@ describe("the official Express compiler with a CopilotKit catalog", () => {
     expect(() =>
       compiler.compile('root = Evil("run code")', "bad", testManifest),
     ).toThrow();
+    expect(() =>
+      compiler.compile(
+        'root = Form([Button("Review", submit=true)])',
+        "bad",
+        testManifest,
+      ),
+    ).toThrow(/onSubmit Event/);
     expect(() =>
       compiler.compile('<a2ui>root = Text("unfinished")', "bad", testManifest),
     ).toThrow(/Finish/);

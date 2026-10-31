@@ -16,14 +16,17 @@ describe("Chrome Prompt API adapter", () => {
   it("uses matching language options and destroys each per-run clone", async () => {
     const destroyClone = vi.fn();
     const destroyBase = vi.fn();
-    const stream = new ReadableStream<string>({
-      start(controller) {
-        controller.enqueue("root = Text");
-        controller.enqueue('("Hello")');
-        controller.close();
-      },
-    });
-    const promptStreaming = vi.fn(() => stream);
+    const stream = () =>
+      new ReadableStream<string>({
+        start(controller) {
+          controller.enqueue("root = Text");
+          controller.enqueue('("Hello")');
+          controller.close();
+        },
+      });
+    const promptStreaming = vi.fn((_input: unknown, _options: unknown) =>
+      stream(),
+    );
     const availability = vi.fn(async () => "available");
     const create = vi.fn(async () => ({
       clone: async () => ({ promptStreaming, destroy: destroyClone }),
@@ -48,6 +51,27 @@ describe("Chrome Prompt API adapter", () => {
     });
     expect(promptStreaming).toHaveBeenCalledWith("request", { signal });
     expect(destroyClone).toHaveBeenCalledOnce();
+    for await (const _ of model.generate(
+      JSON.stringify({
+        conversation: [
+          { role: "user", content: "Create a checkout" },
+          { role: "assistant", content: "Rejected Express" },
+          { role: "user", content: "Repair this compiler error" },
+        ],
+        surfaces: { checkout: { target: "express-preview" } },
+      }),
+      "Express examples",
+      signal,
+    )) {
+      /* Drain the real adapter stream. */
+    }
+    expect(promptStreaming.mock.calls[1]?.[0]).toEqual([
+      { role: "user", content: expect.stringContaining('"surfaces"') },
+      { role: "user", content: "Create a checkout" },
+      { role: "assistant", content: "Rejected Express" },
+      { role: "user", content: "Repair this compiler error" },
+    ]);
+    expect(destroyClone).toHaveBeenCalledTimes(2);
     model.destroy();
     expect(destroyBase).toHaveBeenCalledOnce();
   });

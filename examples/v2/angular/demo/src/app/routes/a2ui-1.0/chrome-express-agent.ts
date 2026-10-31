@@ -8,7 +8,7 @@ import {
 import type { A2UIOperation, GenerativeUIManifest } from "@copilotkit/shared";
 import { Observable } from "rxjs";
 import { ChromeModel } from "./chrome-model";
-import { createExpressCompiler } from "./express-compiler";
+import { createExpressCompiler, EXPRESS_COMPONENTS } from "./express-compiler";
 import type { ExpressCompiler } from "./express-compiler";
 import { demoActionSource } from "./demo-actions";
 
@@ -284,12 +284,20 @@ export class ChromeExpressAgent extends AbstractAgent {
                 ...requestData,
                 ...(compilerFeedback.length
                   ? {
-                      repair: {
-                        rejectedExpress: rejectedDsl.slice(0, 12_000),
-                        compilerDiagnostic: compilerFeedback.at(-1),
-                        instruction:
-                          "Repair the rejected Express using this diagnostic and the catalog. Return a complete corrected <a2ui> block. Keep the original requested interface. Do not explain the correction.",
-                      },
+                      conversation: [
+                        ...(requestData.conversation as {
+                          role: string;
+                          content: string;
+                        }[]),
+                        {
+                          role: "assistant",
+                          content: rejectedDsl.slice(0, 12_000),
+                        },
+                        {
+                          role: "user",
+                          content: `The Express compiler rejected your response: ${compilerFeedback.at(-1)}\nReturn a complete corrected <a2ui> block for the original request. Correct every invalid constructor or argument. Constructor names are case-sensitive: ${EXPRESS_COMPONENTS.join(", ")}. Use CheckBox, not Checkbox; gap, not spacing. Button color is primary, secondary, or danger; omit it for the default. Put form fields in Form with Event as its second argument and a submit=true Button. Declare variables outside child arrays. Do not repeat positional arguments as named arguments. Do not explain the correction.`,
+                        },
+                      ],
                     }
                   : {}),
               });
