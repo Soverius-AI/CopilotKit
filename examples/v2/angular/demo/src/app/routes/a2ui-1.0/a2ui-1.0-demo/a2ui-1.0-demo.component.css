@@ -221,6 +221,16 @@ main {
   flex: 1;
   min-height: 350px;
 }
+.workspace.expanded {
+  grid-template-columns: minmax(0, 1fr);
+}
+.workspace.expanded .source {
+  display: none;
+}
+.preview-toggle {
+  font-size: 10px;
+  padding: 5px 8px;
+}
 .source,
 .preview {
   display: flex;
@@ -228,11 +238,13 @@ main {
 }
 .presets {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
   padding: 10px 13px;
   background: #fafbf8;
-  border-bottom: 1px solid #e8ebe5;
+  border: 1px solid #e8ebe5;
+  border-radius: 8px;
 }
 .presets > span {
   font:
@@ -330,6 +342,7 @@ h3 {
 }
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .tabs button {

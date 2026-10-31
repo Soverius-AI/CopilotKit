@@ -4,6 +4,42 @@ import { createExpressCompiler, EXPRESS_PRESETS } from "./express-compiler";
 import { testManifest, testUI } from "./test-catalog";
 
 describe("the official Express compiler with a CopilotKit catalog", () => {
+  it.each([
+    [
+      "shopping",
+      "demo_checkout",
+      ["Slider", "RadioGroup", "TextArea", "CheckBox", "Select"],
+    ],
+    [
+      "project",
+      "demo_project",
+      ["DateTimeInput", "Slider", "RadioGroup", "TextArea", "Select"],
+    ],
+  ] as const)(
+    "compiles the %s form with validated controls and a structured submit event",
+    async (preset, event, components) => {
+      const compiler = await createExpressCompiler(exportA2UICatalog(testUI));
+      const operations = compiler.compile(
+        EXPRESS_PRESETS[preset],
+        preset,
+        testManifest,
+      );
+      const json = JSON.stringify(operations);
+      expect(json).toContain('"component":"Form"');
+      expect(json).toContain(`"name":"${event}"`);
+      for (const component of components)
+        expect(json).toContain(`"component":"${component}"`);
+      expect(json).toContain('"@call":"email"');
+      expect(json).toContain('"submit":true');
+      expect(json).toContain('"@path":"/consent"');
+      if (preset === "shopping") {
+        expect(json).toContain('"@call":"formatString"');
+        expect(json).toContain("calc(expression:");
+        expect(json).toContain('"@path":"/items/backpacks"');
+      }
+    },
+  );
+
   it("compiles the form with a two-way binding and an agent event", async () => {
     const compiler = await createExpressCompiler(exportA2UICatalog(testUI));
     const operations = compiler.compile(

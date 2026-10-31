@@ -91,27 +91,28 @@
       <copilot-chat [agentId]="agentId" class="chat" />
     </section>
     <section class="workbench">
-      <div class="workspace">
+      <div class="presets" role="group" aria-label="Demo presets">
+        <span>TRY A PRESET</span
+        ><button (click)="preset('card')" [disabled]="!ready() || running()">
+          Card</button
+        ><button (click)="preset('form')" [disabled]="!ready() || running()">
+          Bound form</button
+        ><button
+          (click)="preset('shopping')"
+          [disabled]="!ready() || running()"
+        >
+          Shopping checkout</button
+        ><button (click)="preset('project')" [disabled]="!ready() || running()">
+          Project brief
+        </button>
+      </div>
+      <div class="workspace" [class.expanded]="expandedPreview()">
         <section class="source panel">
           <div class="panel-heading">
             <span><i>02</i> Express source</span
             ><small>{{
               debug().source === "model" ? "MODEL OUTPUT" : "MANUAL / PRESET"
             }}</small>
-          </div>
-          <div class="presets">
-            <span>TRY A PRESET</span
-            ><button
-              (click)="preset('card')"
-              [disabled]="!ready() || running()"
-            >
-              Card</button
-            ><button
-              (click)="preset('form')"
-              [disabled]="!ready() || running()"
-            >
-              Bound form
-            </button>
           </div>
           <label for="express-source" class="sr-only"
             >Editable A2UI Express source</label
@@ -135,7 +136,14 @@
         </section>
         <section class="preview panel">
           <div class="panel-heading">
-            <span><i>03</i> Native preview</span><small>ANGULAR</small>
+            <span><i>03</i> Native preview</span>
+            <button
+              class="preview-toggle"
+              (click)="expandedPreview.set(!expandedPreview())"
+              [attr.aria-expanded]="expandedPreview()"
+            >
+              {{ expandedPreview() ? "Show editor" : "Expand preview" }}
+            </button>
           </div>
           <div class="preview-canvas">
             <copilot-generative-ui-surface
@@ -181,7 +189,12 @@
               [class.selected]="tab() === 'state'"
               (click)="tab.set('state')"
             >
-              Agent state
+              Agent state</button
+            ><button
+              [class.selected]="tab() === 'data'"
+              (click)="tab.set('data')"
+            >
+              Form data
             </button>
           </div>
           <div class="run-status">
@@ -214,6 +227,9 @@
           }
           @case ("state") {
             <pre>{{ debug() | json }}</pre>
+          }
+          @case ("data") {
+            <pre>{{ formData() | json }}</pre>
           }
         }
         <div class="debug-footer">

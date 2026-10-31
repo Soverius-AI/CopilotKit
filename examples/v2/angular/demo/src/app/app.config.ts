@@ -63,14 +63,14 @@ export const appConfig: ApplicationConfig = {
           available: "always",
           suggestions: [
             {
-              title: "A trip planner",
+              title: "Shopping checkout",
               message:
-                "Create a trip planning form with a name field and a submit button.",
+                "Create a complete shopping checkout with products, quantities, contact and delivery fields, delivery choices, gift wrapping, a live total, validation, and a preview order button.",
             },
             {
-              title: "A welcome card",
+              title: "Project brief",
               message:
-                "Create a welcome card with a title, a short introduction, and a badge.",
+                "Create a project brief with name, email, company, role dropdown, start date, budget slider, contact preferences, project notes, consent, validation, and a submit button.",
             },
             {
               title: "Edit this view",

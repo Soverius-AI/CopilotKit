@@ -20,6 +20,10 @@ Open <http://localhost:4200/a2ui-1.0> for the browser inference demo. This route
 
 **Card**, **Bound form**, and **Compile & render** exercise the same compiler and agent activity path without inference. They work when the Prompt API is unavailable. In the bound form, type a name and select **Apply data update**: its status changes while your name remains intact. Preset/manual runs are labeled separately from model generation. No cloud fallback is used.
 
+**Shopping checkout** adds contact and address fields, country selection, quantity sliders, delivery choices, gift wrapping, a promo code (`SAVE10`), notes, consent, and a live total. **Project brief** adds a role dropdown, date picker, budget slider, contact choices, notes, and validation. Both open in an expanded native preview; **Show editor** restores the DSL alongside it. **Form data** shows the live surface model as you type.
+
+The manual forms validate before submission and acknowledge their demo actions locally through the same agent/compiler/activity path. Checkout previews an order; the project brief is retained for the current browser session. No order is placed or form sent to a service. Model-generated form actions continue through model inference.
+
 A2UI v1.0 is currently a release candidate. Keep examples small: the local agent limits output to 60,000 characters and run context to 28,000 characters. It uses fresh clones of a system-prompt session so CopilotKit remains the sole owner of conversation history. Only the completed, validated compiler output changes the preview; invalid or cancelled responses preserve the previous UI.
 
 ### Debug transport

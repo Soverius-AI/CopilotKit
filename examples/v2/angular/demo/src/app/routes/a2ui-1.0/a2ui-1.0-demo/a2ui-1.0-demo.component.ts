@@ -51,8 +51,11 @@ export class A2ui10DemoComponent {
         ?.a2uiExpress ?? initialDebugState(),
   );
   readonly running = computed(() => this.store()?.isRunning() ?? false);
-  readonly draft = signal<string>(EXPRESS_PRESETS.form);
-  readonly tab = signal<"operations" | "prompt" | "state">("operations");
+  readonly draft = signal<string>(EXPRESS_PRESETS.shopping);
+  readonly tab = signal<"operations" | "prompt" | "state" | "data">(
+    "operations",
+  );
+  readonly expandedPreview = signal(false);
   readonly runtime = inject(CopilotGenerativeUI);
   readonly #copilot = inject(CopilotKit);
   readonly ready = computed(
@@ -77,6 +80,18 @@ export class A2ui10DemoComponent {
           surface.target === "express-preview" && !surface.status,
       )
       .at(-1)?.[0];
+  });
+  readonly formData = computed(() => {
+    this.runtime.version();
+    return (
+      this.runtime.manager
+        .debugSurfaces()
+        .find(
+          (surface) =>
+            surface.threadId === this.store()?.agent.threadId &&
+            surface.surfaceId === this.activeSurfaceId(),
+        )?.dataModel ?? {}
+    );
   });
 
   constructor() {
@@ -124,6 +139,10 @@ export class A2ui10DemoComponent {
   }
 
   preset(kind: keyof typeof EXPRESS_PRESETS) {
+    this.expandedPreview.set(kind === "shopping" || kind === "project");
+    this.tab.set(
+      kind === "shopping" || kind === "project" ? "data" : "operations",
+    );
     this.draft.set(EXPRESS_PRESETS[kind]);
     void this.compile(
       EXPRESS_PRESETS[kind],
@@ -148,7 +167,8 @@ export class A2ui10DemoComponent {
     agent.threadId = crypto.randomUUID();
     this.runtime.manager.setActiveThread(agent.threadId);
     agent.setState({ a2uiExpress: initialDebugState() });
-    this.draft.set(EXPRESS_PRESETS.form);
+    this.draft.set(EXPRESS_PRESETS.shopping);
+    this.expandedPreview.set(false);
     void this.prepare();
   }
 }

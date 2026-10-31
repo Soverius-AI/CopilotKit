@@ -10,6 +10,7 @@ import { Observable } from "rxjs";
 import { ChromeModel } from "./chrome-model";
 import { createExpressCompiler } from "./express-compiler";
 import type { ExpressCompiler } from "./express-compiler";
+import { demoActionSource } from "./demo-actions";
 
 export const EXPRESS_AGENT_ID = "a2ui-1.0";
 export const EXPRESS_TARGET = "express-preview";
@@ -64,6 +65,7 @@ export class ChromeExpressAgent extends AbstractAgent {
   #controller?: AbortController;
   #enableController?: AbortController;
   #manualSource?: string;
+  #manualSurfaces = new Set<string>();
   #modelReady = false;
   #configuration = 0;
 
@@ -162,6 +164,7 @@ export class ChromeExpressAgent extends AbstractAgent {
     this.#modelReady = false;
     this.#compiler = undefined;
     this.#manualSource = undefined;
+    this.#manualSurfaces.clear();
     this.#update({
       availability: "checking",
       modelStarting: false,
@@ -173,7 +176,7 @@ export class ChromeExpressAgent extends AbstractAgent {
     return new Observable((observer) => {
       const controller = new AbortController();
       this.#controller = controller;
-      const source = this.#manualSource;
+      const queuedSource = this.#manualSource;
       this.#manualSource = undefined;
       const emit = (event: Record<string, unknown>) => {
         if (!observer.closed) observer.next(event as BaseEvent);
@@ -199,6 +202,11 @@ export class ChromeExpressAgent extends AbstractAgent {
           ? envelopeToManifest(envelope)
           : this.#manifest;
         const action = envelope?.metadata.extensions.copilotkit_action ?? null;
+        const source =
+          queuedSource ??
+          (action && this.#manualSurfaces.has(action.action.surfaceId)
+            ? demoActionSource(action)
+            : undefined);
         const surfaceId = `express-${input.runId}`;
         emit({
           type: EventType.STATE_SNAPSHOT,
@@ -288,6 +296,8 @@ export class ChromeExpressAgent extends AbstractAgent {
             bySurface.set(id, [...(bySurface.get(id) ?? []), operation]);
           }
           for (const [id, surfaceOperations] of bySurface) {
+            if (source !== undefined) this.#manualSurfaces.add(id);
+            else this.#manualSurfaces.delete(id);
             const messageId = `express:${input.threadId}:${id}`;
             // AG-UI strips activities from RunAgentInput; the local agent's
             // canonical transcript still holds the previous surface activity.

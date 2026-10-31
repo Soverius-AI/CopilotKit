@@ -5,6 +5,8 @@ import {
   validateOperation,
 } from "@copilotkit/shared";
 import type { A2UIOperation, GenerativeUIManifest } from "@copilotkit/shared";
+import { EXPRESS_PRESETS } from "./express-presets";
+export { EXPRESS_PRESETS } from "./express-presets";
 
 export const EXPRESS_COMPONENTS = [
   "Card",
@@ -21,18 +23,10 @@ export const EXPRESS_COMPONENTS = [
   "CheckBox",
   "Slider",
   "Select",
+  "Form",
+  "RadioGroup",
+  "DateTimeInput",
 ] as const;
-
-export const EXPRESS_PRESETS = {
-  card: `root = Card([Title("A UI, written in Express"), Text("The compiler turns these constructors into native Angular components."), Badge("Compiled locally")])`,
-  form: `$/name = ""
-$/status = "Ready to submit"
-heading = Title("Plan your next adventure")
-name = TextField("Your name", $/name, placeholder="Alex")
-status = Text($/status)
-submit = Button("Create my itinerary", Event("plan_trip", {name: $/name}))
-root = Card([heading, name, status, submit])`,
-};
 
 /** All model-visible signatures come from the very catalog the host renders. */
 export async function createExpressCompiler(schema: Record<string, unknown>) {
@@ -47,12 +41,29 @@ export async function createExpressCompiler(schema: Record<string, unknown>) {
       (EXPRESS_COMPONENTS as readonly string[]).includes(entry.name),
     ),
     [...catalog.functions.values()].filter((entry) =>
-      ["formatString", "formatCurrency", "required", "email"].includes(
-        entry.name,
-      ),
+      [
+        "formatString",
+        "formatCurrency",
+        "required",
+        "email",
+        "numeric",
+        "calc",
+      ].includes(entry.name),
     ),
   );
-  const examples = `### Example: an informational card\n<a2ui>\n${EXPRESS_PRESETS.card}\n</a2ui>\n\n### Example: a bound input and an action\n<a2ui>\n${EXPRESS_PRESETS.form}\n</a2ui>`;
+  const examples = `### Example: an informational card\n<a2ui>\n${EXPRESS_PRESETS.card}\n</a2ui>\n\n### Example: a bound input and an action\n<a2ui>\n${EXPRESS_PRESETS.form}\n</a2ui>
+
+### Example: live formatting and validation
+<a2ui>
+$/budget = 2500
+$/email = ""
+budget = Slider("Project budget", $/budget, 500, 10000, step=500)
+summary = Text(formatCurrency(value=$/budget, currency="USD"))
+email = TextField("Work email", $/email, checks=[{condition: email(value=$/email), message: "Use a valid email address."}])
+root = Card([Title("Tell us about your project"), budget, summary, email])
+</a2ui>
+
+For arithmetic with named variables, use calc inside formatString interpolation; the renderer resolves its variables from paths. The calc constructor itself accepts only its declared expression parameter. In event context, pass data paths rather than function calls. Use Form with a submit=true Button for native browser form validation.`;
   const guide = new ExpressPromptGenerator([selected], {
     [selected.id]: examples,
   }).generate();

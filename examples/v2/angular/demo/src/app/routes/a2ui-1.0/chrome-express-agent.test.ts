@@ -37,6 +37,110 @@ async function configured(model = new TestModel()) {
 }
 
 describe("browser-local CopilotKit agent", () => {
+  it.each([
+    [
+      "shopping",
+      "demo_checkout",
+      {
+        customer: {
+          firstName: "Alex",
+          lastName: "Morgan",
+          email: "alex@example.com",
+        },
+        address: {
+          city: "Vienna",
+          street: "12 Garden Street",
+          postalCode: "1010",
+        },
+        items: { backpacks: 2, bottles: 2 },
+        delivery: "express",
+        gift: true,
+        promo: "SAVE10",
+      },
+      "$217.40",
+    ],
+    [
+      "project",
+      "demo_project",
+      {
+        person: { name: "Alex Morgan", email: "alex@example.com" },
+        project: {
+          budget: 4500,
+          startDate: "2027-01-15",
+          contact: "call",
+          notes: "A new shop",
+        },
+      },
+      "$4,500.00",
+    ],
+  ] as const)(
+    "acknowledges a manual %s form submission without invoking the model",
+    async (preset, event, context, amount) => {
+      const { agent, model } = await configured();
+      agent.useManualSource(EXPRESS_PRESETS[preset]);
+      await agent.runAgent();
+      const surfaceId = agent.debugState.surfaceId;
+      const action = {
+        version: "v1.0",
+        action: {
+          name: event,
+          surfaceId,
+          sourceComponentId: preset === "shopping" ? "checkout" : "form",
+          timestamp: "2026-10-31T12:00:00.000Z",
+          context,
+        },
+      };
+      await agent.runAgent({
+        forwardedProps: {
+          copilotkit: {
+            ui: {
+              "v1.0": {
+                supportedCatalogIds: [testUI.id],
+                inlineCatalogs: [
+                  {
+                    catalogId: testUI.id,
+                    protocolVersion: "1.0",
+                    components: testManifest.components,
+                    functions: {},
+                  },
+                ],
+              },
+              metadata: {
+                extensions: {
+                  copilotkit_format: 3,
+                  copilotkit_transport: "tool",
+                  copilotkit_targets: testManifest.targets,
+                  copilotkit_surfaces: {
+                    [surfaceId]: { target: "express-preview" },
+                  },
+                  copilotkit_contextSent: false,
+                  copilotkit_action: action,
+                },
+              },
+            },
+          },
+        },
+      });
+      expect(model.input).toBe("");
+      expect(agent.debugState.stage).toBe("ready");
+      expect(agent.debugState.source).toBe("manual");
+      expect(agent.debugState.action).toEqual(action);
+      expect(agent.debugState.operations).toEqual([
+        {
+          version: "v1.0",
+          updateDataModel: {
+            surfaceId,
+            path: "/status",
+            value: expect.stringContaining(amount),
+          },
+        },
+      ]);
+      expect(
+        agent.messages.filter((message) => message.role === "activity"),
+      ).toHaveLength(1);
+    },
+  );
+
   it("can enable a session while Chrome already has a model download in progress", async () => {
     const model = new TestModel();
     model.availability = async () => "downloading";
