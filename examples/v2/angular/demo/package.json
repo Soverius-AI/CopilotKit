@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@a2ui/agent": "0.0.2",
     "@a2ui/web_core": "0.14.0",
     "@ag-ui/client": "1.0.2",
     "@ag-ui/core": "1.0.2",
@@ -32,6 +33,7 @@
     "@copilotkit/mcp-apps-renderer": "workspace:*",
     "@copilotkit/shared": "workspace:*",
     "@copilotkit/web-inspector": "workspace:*",
+    "@huggingface/transformers": "4.3.2",
     "@jetbrains/websandbox": "^1.1.3",
     "@lucide/angular": "^1.31.0",
     "@tanstack/pacer": "^0.20.1",
@@ -53,17 +55,16 @@
     "untruncate-json": "^0.0.1",
     "uuid": "^11.1.0",
     "zod": "^3.25.75",
-    "zod-to-json-schema": "^3.24.6",
-    "@a2ui/agent": "0.0.2"
+    "zod-to-json-schema": "^3.24.6"
   },
   "devDependencies": {
     "@angular/build": "22.0.0",
     "@angular/cli": "22.0.0",
     "@angular/compiler-cli": "22.0.0",
+    "@types/dom-chromium-ai": "0.0.18",
     "nodemon": "^3.1.7",
     "rimraf": "^6.0.1",
     "typescript": "6.0.3",
-    "@types/dom-chromium-ai": "0.0.18",
     "vitest": "4.1.3"
   }
 }

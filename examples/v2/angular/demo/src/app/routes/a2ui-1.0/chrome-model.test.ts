@@ -49,7 +49,10 @@ describe("Chrome Prompt API adapter", () => {
       ...availability.mock.calls[0]?.[0],
       initialPrompts: [{ role: "system", content: "Express examples" }],
     });
-    expect(promptStreaming).toHaveBeenCalledWith("request", { signal });
+    expect(promptStreaming).toHaveBeenCalledWith(
+      [{ role: "user", content: "request" }],
+      { signal },
+    );
     expect(destroyClone).toHaveBeenCalledOnce();
     for await (const _ of model.generate(
       JSON.stringify({
@@ -66,10 +69,14 @@ describe("Chrome Prompt API adapter", () => {
       /* Drain the real adapter stream. */
     }
     expect(promptStreaming.mock.calls[1]?.[0]).toEqual([
-      { role: "user", content: expect.stringContaining('"surfaces"') },
       { role: "user", content: "Create a checkout" },
       { role: "assistant", content: "Rejected Express" },
-      { role: "user", content: "Repair this compiler error" },
+      {
+        role: "user",
+        content: expect.stringContaining(
+          "Current user request:\nRepair this compiler error",
+        ),
+      },
     ]);
     expect(destroyClone).toHaveBeenCalledTimes(2);
     model.destroy();

@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import { exportA2UICatalog } from "@copilotkit/shared/generative-ui";
 import { ChromeExpressAgent } from "./chrome-express-agent";
 import { ChromeModel } from "./chrome-model";
-import { EXPRESS_PRESETS } from "./express-compiler";
+import { EXPRESS_EXAMPLES } from "./express-compiler";
 import { testManifest, testUI } from "./test-catalog";
 
 class TestModel extends ChromeModel {
-  output = `<a2ui>\n${EXPRESS_PRESETS.form}\n</a2ui>`;
-  input = "";
+  output = `<a2ui>\n${EXPRESS_EXAMPLES.form}\n</a2ui>`;
+  inputs: string[] = [];
   enabledPrompt = "";
   override async availability(): Promise<Availability> {
-    return "available" as const;
+    return "available";
   }
   override async enable(prompt: string) {
     this.enabledPrompt = prompt;
   }
   override async *generate(input: string, prompt: string, signal: AbortSignal) {
-    this.input = input;
+    this.inputs.push(input);
     expect(prompt).toBe(this.enabledPrompt);
     signal.throwIfAborted();
     yield this.output;
@@ -26,7 +26,7 @@ class TestModel extends ChromeModel {
 
 async function configured(model = new TestModel()) {
   const agent = new ChromeExpressAgent(model);
-  await agent.configure(exportA2UICatalog(testUI), testManifest);
+  await agent.configure(exportA2UICatalog(testUI), testManifest, testUI);
   agent.setState({ ...agent.state, unrelated: "preserved" });
   agent.addMessage({
     id: "request",
@@ -37,190 +37,39 @@ async function configured(model = new TestModel()) {
 }
 
 describe("browser-local CopilotKit agent", () => {
-  it("returns compiler feedback to the model and renders only the repaired response", async () => {
-    class RepairModel extends TestModel {
-      inputs: string[] = [];
-      override async *generate(
-        input: string,
-        prompt: string,
-        signal: AbortSignal,
-      ) {
-        signal.throwIfAborted();
-        expect(prompt).toBe(this.enabledPrompt);
+  it("returns native prop-type rejections to the model before publishing UI", async () => {
+    class PropRepairModel extends TestModel {
+      override async *generate(input: string) {
         this.inputs.push(input);
         yield this.inputs.length === 1
-          ? 'root = Badge("Local model", color="green")'
-          : this.output;
+          ? 'root = Text("Total", weight="semibold")'
+          : 'root = Text("Total", fontWeight="semibold")';
       }
     }
-    const model = new RepairModel();
-    const { agent } = await configured(model);
+    const { agent, model } = await configured(new PropRepairModel());
     await agent.enable();
-    const publishedAt: number[] = [];
-    await agent.runAgent(
-      {},
-      {
-        onActivitySnapshotEvent: () => {
-          publishedAt.push(model.inputs.length);
-        },
-      },
-    );
+    await agent.runAgent();
     expect(model.inputs).toHaveLength(2);
-    expect(JSON.parse(model.inputs[1]!).conversation.slice(-2)).toEqual([
-      {
-        role: "assistant",
-        content: 'root = Badge("Local model", color="green")',
-      },
-      { role: "user", content: expect.stringContaining("color") },
-    ]);
-    expect(publishedAt).toEqual([2]);
-    expect(agent.debugState.attempt).toBe(2);
-    expect(agent.debugState.compilerFeedback).toHaveLength(1);
+    expect(model.inputs[1]).toContain("weight");
+    expect(model.inputs[1]).toContain("Expected number");
     expect(agent.debugState.stage).toBe("ready");
-    expect(agent.debugState.diagnostics).toEqual([]);
-  });
-
-  it("stops after three invalid model responses and keeps the previous valid preview", async () => {
-    class InvalidModel extends TestModel {
-      calls = 0;
-      override async *generate() {
-        ++this.calls;
-        yield 'root = Unknown("invalid")';
-      }
-    }
-    const model = new InvalidModel();
-    const { agent } = await configured(model);
-    agent.useManualSource(EXPRESS_PRESETS.card);
-    await agent.runAgent();
-    const previous = agent.messages.filter(
-      (message) => message.role === "activity",
-    );
-    await agent.enable();
-    await agent.runAgent();
-    expect(model.calls).toBe(3);
-    expect(agent.debugState.stage).toBe("error");
-    expect(agent.debugState.compilerFeedback).toHaveLength(3);
+    expect(agent.debugState.attempt).toBe(2);
     expect(
       agent.messages.filter((message) => message.role === "activity"),
-    ).toEqual(previous);
+    ).toHaveLength(1);
+  });
+  it("requires model enablement and has no preset execution path", async () => {
+    const { agent, model } = await configured();
+    await agent.runAgent();
+    expect(agent.debugState.stage).toBe("error");
+    expect(agent.messages.some((message) => message.role === "activity")).toBe(
+      false,
+    );
+    expect(model.inputs).toEqual([]);
+    expect(agent).not.toHaveProperty("useManualSource");
   });
 
-  it.each([
-    [
-      "shopping",
-      "demo_checkout",
-      {
-        customer: {
-          firstName: "Alex",
-          lastName: "Morgan",
-          email: "alex@example.com",
-        },
-        address: {
-          city: "Vienna",
-          street: "12 Garden Street",
-          postalCode: "1010",
-        },
-        items: { backpacks: 2, bottles: 2 },
-        delivery: "express",
-        gift: true,
-        promo: "SAVE10",
-      },
-      "$217.40",
-    ],
-    [
-      "project",
-      "demo_project",
-      {
-        person: { name: "Alex Morgan", email: "alex@example.com" },
-        project: {
-          budget: 4500,
-          startDate: "2027-01-15",
-          contact: "call",
-          notes: "A new shop",
-        },
-      },
-      "$4,500.00",
-    ],
-  ] as const)(
-    "acknowledges a manual %s form submission without invoking the model",
-    async (preset, event, context, amount) => {
-      const { agent, model } = await configured();
-      agent.useManualSource(EXPRESS_PRESETS[preset]);
-      await agent.runAgent();
-      const surfaceId = agent.debugState.surfaceId;
-      const action = {
-        version: "v1.0",
-        action: {
-          name: event,
-          surfaceId,
-          sourceComponentId: preset === "shopping" ? "checkout" : "form",
-          timestamp: "2026-10-31T12:00:00.000Z",
-          context,
-        },
-      };
-      await agent.runAgent({
-        forwardedProps: {
-          copilotkit: {
-            ui: {
-              "v1.0": {
-                supportedCatalogIds: [testUI.id],
-                inlineCatalogs: [
-                  {
-                    catalogId: testUI.id,
-                    protocolVersion: "1.0",
-                    components: testManifest.components,
-                    functions: {},
-                  },
-                ],
-              },
-              metadata: {
-                extensions: {
-                  copilotkit_format: 3,
-                  copilotkit_transport: "tool",
-                  copilotkit_targets: testManifest.targets,
-                  copilotkit_surfaces: {
-                    [surfaceId]: { target: "express-preview" },
-                  },
-                  copilotkit_contextSent: false,
-                  copilotkit_action: action,
-                },
-              },
-            },
-          },
-        },
-      });
-      expect(model.input).toBe("");
-      expect(agent.debugState.stage).toBe("ready");
-      expect(agent.debugState.source).toBe("manual");
-      expect(agent.debugState.action).toEqual(action);
-      expect(agent.debugState.operations).toEqual([
-        {
-          version: "v1.0",
-          updateDataModel: {
-            surfaceId,
-            path: "/status",
-            value: expect.stringContaining(amount),
-          },
-        },
-      ]);
-      expect(
-        agent.messages.filter((message) => message.role === "activity"),
-      ).toHaveLength(1);
-    },
-  );
-
-  it("can enable a session while Chrome already has a model download in progress", async () => {
-    const model = new TestModel();
-    model.availability = async () => "downloading";
-    const { agent } = await configured(model);
-    expect(agent.debugState.availability).toBe("downloading");
-    expect(agent.debugState.modelStarting).toBe(false);
-    await agent.enable();
-    expect(agent.debugState.availability).toBe("enabled");
-    expect(agent.debugState.modelStarting).toBe(false);
-  });
-
-  it("teaches Express in the system prompt and emits DSL state plus surface activities", async () => {
+  it("teaches Express and emits model state plus validated surface activities", async () => {
     const { agent, model } = await configured();
     await agent.enable();
     const events: string[] = [];
@@ -238,48 +87,142 @@ describe("browser-local CopilotKit agent", () => {
         },
       },
     );
-    expect(events).toContain("STATE_SNAPSHOT");
-    expect(events).toContain("STATE_DELTA");
-    expect(events).toContain("ACTIVITY_SNAPSHOT");
+    expect(events).toEqual(
+      expect.arrayContaining([
+        "STATE_SNAPSHOT",
+        "STATE_DELTA",
+        "ACTIVITY_SNAPSHOT",
+      ]),
+    );
     expect(agent.state.unrelated).toBe("preserved");
-    expect(agent.debugState.stage).toBe("ready");
-    expect(agent.debugState.dsl).toContain('Event("plan_trip"');
+    expect(agent.debugState).toMatchObject({
+      stage: "ready",
+      source: "model",
+      model: model.info,
+    });
     expect(agent.debugState.operations.length).toBeGreaterThan(0);
     expect(model.enabledPrompt).toContain("A2UI Express DSL Output Contract");
     expect(model.enabledPrompt).not.toContain("render_ui");
-    expect(JSON.parse(model.input).conversation[0].content).toBe(
+    expect(JSON.parse(model.inputs[0]!).conversation[0].content).toBe(
       "Create a trip form",
     );
-    expect(model.input).not.toContain("unrelated");
+    expect(model.inputs[0]).not.toContain("unrelated");
   });
 
-  it("compiles manual DSL without enabling or invoking the model", async () => {
+  it("returns compiler feedback and publishes only the repaired model response", async () => {
+    class RepairModel extends TestModel {
+      override async *generate(input: string) {
+        this.inputs.push(input);
+        yield this.inputs.length === 1
+          ? 'root = Badge("Local", color="green")'
+          : this.output;
+      }
+    }
+    const { agent, model } = await configured(new RepairModel());
+    await agent.enable();
+    const publishedAt: number[] = [];
+    await agent.runAgent(
+      {},
+      {
+        onActivitySnapshotEvent: () => {
+          publishedAt.push(model.inputs.length);
+        },
+      },
+    );
+    expect(model.inputs).toHaveLength(2);
+    expect(JSON.parse(model.inputs[1]!).conversation.at(-1)).toMatchObject({
+      role: "user",
+      content: expect.stringContaining("color"),
+    });
+    expect(publishedAt).toEqual([2]);
+    expect(agent.debugState).toMatchObject({
+      stage: "ready",
+      attempt: 2,
+      diagnostics: [],
+    });
+  });
+
+  it("keeps the previous model-generated UI after three invalid responses", async () => {
     const { agent, model } = await configured();
-    agent.useManualSource(EXPRESS_PRESETS.card);
-    await agent.runAgent();
-    expect(model.input).toBe("");
-    expect(agent.debugState.source).toBe("manual");
-    expect(agent.debugState.stage).toBe("ready");
-  });
-
-  it("reports invalid output in state and publishes no new surface", async () => {
-    const { agent } = await configured();
-    agent.useManualSource(EXPRESS_PRESETS.form);
+    await agent.enable();
     await agent.runAgent();
     const before = agent.messages.filter(
       (message) => message.role === "activity",
-    ).length;
-    agent.useManualSource('root = NotInTheCatalog("x")');
+    );
+    model.output = 'root = Unknown("invalid")';
     await agent.runAgent();
+    expect(model.inputs).toHaveLength(4);
     expect(agent.debugState.stage).toBe("error");
-    expect(agent.debugState.diagnostics.length).toBe(1);
-    expect(agent.debugState.lastSuccessfulDsl).toBe(EXPRESS_PRESETS.form);
+    expect(agent.debugState.compilerFeedback).toHaveLength(3);
     expect(
       agent.messages.filter((message) => message.role === "activity"),
-    ).toHaveLength(before);
+    ).toEqual(before);
   });
 
-  it("cancels a generation before it can commit a preview", async () => {
+  it("passes action data to inference and retains one cumulative surface activity", async () => {
+    const { agent, model } = await configured();
+    await agent.enable();
+    await agent.runAgent();
+    const surfaceId = agent.debugState.surfaceId;
+    model.output = `surface(${JSON.stringify(surfaceId)}, update=true)\n$/status = "Updated"`;
+    const action = {
+      version: "v1.0",
+      action: {
+        name: "plan_trip",
+        surfaceId,
+        sourceComponentId: "submit",
+        timestamp: "2026-10-31T12:00:00.000Z",
+        context: { name: "Alex" },
+      },
+    };
+    await agent.runAgent({
+      forwardedProps: {
+        copilotkit: {
+          ui: {
+            "v1.0": {
+              supportedCatalogIds: [testUI.id],
+              inlineCatalogs: [
+                {
+                  catalogId: testUI.id,
+                  protocolVersion: "1.0",
+                  components: testManifest.components,
+                  functions: {},
+                },
+              ],
+            },
+            metadata: {
+              extensions: {
+                copilotkit_format: 3,
+                copilotkit_transport: "tool",
+                copilotkit_targets: testManifest.targets,
+                copilotkit_surfaces: {
+                  [surfaceId]: { target: "express-preview" },
+                },
+                copilotkit_contextSent: false,
+                copilotkit_action: action,
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(model.inputs).toHaveLength(2);
+    expect(JSON.parse(model.inputs[1]!).action).toEqual(action);
+    expect(JSON.parse(model.inputs[1]!).instruction).toContain(
+      "Preserve all existing input values",
+    );
+    expect(agent.debugState.stage).toBe("ready");
+    const activities = agent.messages.filter(
+      (message) => message.role === "activity",
+    );
+    expect(activities).toHaveLength(1);
+    expect(activities[0]!.content.operations).toHaveLength(2);
+    expect(agent.debugState.operations[0]).toMatchObject({
+      updateDataModel: { surfaceId, path: "/status", value: "Updated" },
+    });
+  });
+
+  it("cancels before publication and requires re-enabling the released model", async () => {
     let started!: () => void;
     const start = new Promise<void>((resolve) => {
       started = resolve;
@@ -304,36 +247,12 @@ describe("browser-local CopilotKit agent", () => {
     await start;
     agent.cancel();
     await running;
-    expect(agent.debugState.stage).toBe("cancelled");
+    expect(agent.debugState).toMatchObject({
+      stage: "cancelled",
+      availability: "downloadable",
+    });
     expect(agent.messages.some((message) => message.role === "activity")).toBe(
       false,
     );
-  });
-  it("keeps one cumulative activity per surface when applying an update", async () => {
-    const { agent } = await configured();
-    agent.useManualSource(EXPRESS_PRESETS.form);
-    await agent.runAgent();
-    const surfaceId = agent.debugState.surfaceId;
-    await agent.configure(exportA2UICatalog(testUI), {
-      ...testManifest,
-      surfaces: { [surfaceId]: { target: "express-preview" } },
-    });
-    agent.useManualSource(
-      `surface(${JSON.stringify(surfaceId)}, update=true)\n$/status = "Updated"`,
-    );
-    await agent.runAgent();
-    const activities = agent.messages.filter(
-      (message) => message.role === "activity",
-    );
-    expect(activities).toHaveLength(1);
-    const operations = activities[0]!.content.operations as Record<
-      string,
-      unknown
-    >[];
-    expect(operations[0]).toHaveProperty("createSurface");
-    expect(operations.at(-1)).toEqual({
-      version: "v1.0",
-      updateDataModel: { surfaceId, path: "/status", value: "Updated" },
-    });
   });
 });

@@ -5,8 +5,8 @@ import {
   validateOperation,
 } from "@copilotkit/shared";
 import type { A2UIOperation, GenerativeUIManifest } from "@copilotkit/shared";
-import { EXPRESS_PRESETS } from "./express-presets";
-export { EXPRESS_PRESETS } from "./express-presets";
+import { EXPRESS_EXAMPLES } from "./express-examples";
+export { EXPRESS_EXAMPLES } from "./express-examples";
 
 export const EXPRESS_COMPONENTS = [
   "Card",
@@ -131,7 +131,9 @@ export async function createExpressCompiler(schema: Record<string, unknown>) {
       ].includes(entry.name),
     ),
   );
-  const examples = `### Example: an informational card\n<a2ui>\n${EXPRESS_PRESETS.card}\n</a2ui>\n\n### Example: a bound input and an action\n<a2ui>\n${EXPRESS_PRESETS.form}\n</a2ui>
+  const examples = `The following examples teach syntax only. Generate a NEW program for the current user request; do not copy example content or titles unless the user asks for them.
+
+### Request: show a weather card for Vienna. Example response:\n<a2ui>\n${EXPRESS_EXAMPLES.card}\n</a2ui>\n\n### Example: a bound input and an action\n<a2ui>\n${EXPRESS_EXAMPLES.form}\n</a2ui>
 
 ### Example: a complete form with dropdowns, checkbox, and submission
 <a2ui>
@@ -154,7 +156,7 @@ root = Card([Title("Your order"), Text("Order total: $53"), form])
 
 For arithmetic with named variables, use calc inside formatString interpolation; the renderer resolves its variables from paths. The calc constructor itself accepts only its declared expression parameter. In event context, pass data paths rather than function calls. Every Form in this demo MUST have an onSubmit Event as its second argument, with all the input data paths in its context. A submit=true Button submits that Form; it does not replace the Form's Event.
 
-Express syntax reminders: constructor arguments use name=value. An array of children contains only component expressions or component variable names, never JSON property entries such as "span": 2 and never assignments such as name=TextField(...). Declare each form field on its own line, then pass the variable names to Form. The second Select argument is the options list and the third is the bound value. Do not repeat a positional argument as a named argument. Use only declared parameters. Badge color is one of secondary, success, danger, warning, info, discovery; omit it for a neutral badge. A custom hex color can be used on Title or Text.`;
+Express syntax reminders: children arrays must be FLAT. To group children, use Column([child1, child2]) or Row([child1, child2]) as a child; never nest a bare array inside a children array. Constructor arguments use name=value. An array of children contains only component expressions or component variable names, never JSON property entries such as "span": 2 and never assignments such as name=TextField(...). Declare each form field on its own line, then pass the variable names to Form. The second Select argument is the options list and the third is the bound value. Do not repeat a positional argument as a named argument. Use only declared parameters. Badge color is one of secondary, success, danger, warning, info, discovery; omit it for a neutral badge. A custom hex color can be used on Title or Text.`;
   const guide = new ExpressPromptGenerator([selected], {
     [selected.id]: examples,
   }).generate();
@@ -171,9 +173,14 @@ Express syntax reminders: constructor arguments use name=value. An array of chil
           "Express output exceeds the 60,000 character demo limit.",
         );
       const parser = new ExpressParser(selected, surfaceId, "v1.0");
-      const parts = source.includes("<a2ui>")
-        ? parser.unwrap(source)
-        : [{ type: "a2ui" as const, a2uiRaw: source, isFinal: true }];
+      // Some local models wrap the DSL in a Markdown fence. Remove only that
+      // transport wrapper; never repair or replace the generated program.
+      const program = source
+        .trim()
+        .replace(/^```(?:a2ui|express)?\s*\n([\s\S]*?)\n```$/, "$1");
+      const parts = program.includes("<a2ui>")
+        ? parser.unwrap(program)
+        : [{ type: "a2ui" as const, a2uiRaw: program, isFinal: true }];
       const blocks = parts.filter((part) => part.type === "a2ui");
       if (!blocks.length || blocks.some((part) => !part.isFinal)) {
         throw new Error(
@@ -202,7 +209,13 @@ Express syntax reminders: constructor arguments use name=value. An array of chil
             names: new Set(EXPRESS_COMPONENTS),
           },
         });
-        if (!result.ok) throw new Error(result.reason);
+        if (!result.ok)
+          throw new Error(
+            result.reason +
+              (result.reason.includes("must reference component ids")
+                ? " Express children must be a flat array of component constructors or component variables. Wrap a group in Column([...]) or Row([...]); never place an array directly inside a children array."
+                : ""),
+          );
         const typed = operation as A2UIOperation;
         const nodes =
           "createSurface" in typed

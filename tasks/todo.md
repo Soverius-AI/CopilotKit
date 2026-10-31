@@ -104,3 +104,13 @@ A2UI demo validation (2026-10-31):
 - Angular demo Nx build and 11 compiler/agent/adapter tests passed. Core generative UI coverage passed 161 tests; the legacy Angular streaming regression set passed 42 tests.
 - Real Chrome browser checks: native form rendering, two-way input, targeted update preserving the input, action payload in agent state, invalid DSL preserving the preview, and reset. Browser console had no errors on the standalone route.
 - Desktop and mobile screenshots are under output/playwright/. Real Prompt API availability was checked in two Chrome profiles, including one allowing model downloads; both reported unavailable. No generated preset was presented as a model inference result.
+
+## Browser-model fallback and generated-only demo
+
+User direction: remove manually authored UI execution; when Chrome Prompt API is absent or unavailable, load an LLM with Transformers.js in the browser.
+
+- [x] Add a lazy Web Worker Transformers.js adapter with model download progress, streaming, cancellation and disposal; choose it automatically when the native API is unavailable.
+- [x] Remove preset rendering, edited-source compilation and canned form acknowledgements from the demo. Keep few-shot DSL only as model teaching context and compiler test fixtures.
+- [x] Expose the selected engine/model and loading state through AG-UI; preserve official Express compilation and native Angular rendering.
+- [ ] Test native selection and fallback, worker cancellation and failures, and real Chrome generation with the native API disabled. Verify actual input/action flow and capture model-produced results.
+- [ ] Update setup/results documentation, commit logical changes and push.

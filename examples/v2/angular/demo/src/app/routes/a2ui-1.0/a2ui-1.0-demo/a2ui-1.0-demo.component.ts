@@ -4,14 +4,12 @@ import {
   DestroyRef,
   afterNextRender,
   computed,
-  effect,
   inject,
   signal,
 } from "@angular/core";
 import { JsonPipe } from "@angular/common";
 import {
   CopilotChat,
-  CopilotKit,
   injectAgentStore,
   provideCopilotChatLabels,
 } from "@copilotkit/angular";
@@ -27,7 +25,7 @@ import {
   initialDebugState,
 } from "../chrome-express-agent";
 import type { ExpressDebugState } from "../chrome-express-agent";
-import { EXPRESS_COMPONENTS, EXPRESS_PRESETS } from "../express-compiler";
+import { EXPRESS_COMPONENTS } from "../express-compiler";
 
 @Component({
   selector: "a2ui-express-demo",
@@ -51,13 +49,11 @@ export class A2ui10DemoComponent {
         ?.a2uiExpress ?? initialDebugState(),
   );
   readonly running = computed(() => this.store()?.isRunning() ?? false);
-  readonly draft = signal<string>(EXPRESS_PRESETS.shopping);
   readonly tab = signal<"operations" | "prompt" | "state" | "data">(
     "operations",
   );
   readonly expandedPreview = signal(false);
   readonly runtime = inject(CopilotGenerativeUI);
-  readonly #copilot = inject(CopilotKit);
   readonly ready = computed(
     () => !!this.debug().systemPrompt && this.debug().stage !== "preparing",
   );
@@ -95,10 +91,6 @@ export class A2ui10DemoComponent {
   });
 
   constructor() {
-    effect(() => {
-      const dsl = this.debug().dsl;
-      if (dsl) this.draft.set(dsl);
-    });
     afterNextRender(() => {
       void this.prepare();
     });
@@ -116,6 +108,7 @@ export class A2ui10DemoComponent {
       await agent.configure(
         exportA2UICatalog(this.runtime.ui),
         buildGenerativeUIManifest(this.runtime, agent.threadId),
+        this.runtime.ui,
       );
   }
 
@@ -126,39 +119,6 @@ export class A2ui10DemoComponent {
     this.agent()?.cancel();
   }
 
-  async compile(source = this.draft(), label = "Compile edited Express") {
-    const agent = this.agent();
-    if (!agent || this.running()) return;
-    agent.useManualSource(source);
-    agent.addMessage({ id: crypto.randomUUID(), role: "user", content: label });
-    try {
-      await this.#copilot.core.runAgent({ agent });
-    } catch {
-      /* The agent publishes its diagnostic in state. */
-    }
-  }
-
-  preset(kind: keyof typeof EXPRESS_PRESETS) {
-    this.expandedPreview.set(kind === "shopping" || kind === "project");
-    this.tab.set(
-      kind === "shopping" || kind === "project" ? "data" : "operations",
-    );
-    this.draft.set(EXPRESS_PRESETS[kind]);
-    void this.compile(
-      EXPRESS_PRESETS[kind],
-      `Compile the ${kind} preset (no inference)`,
-    );
-  }
-
-  update() {
-    const id = this.activeSurfaceId();
-    if (id)
-      void this.compile(
-        `surface(${JSON.stringify(id)}, update=true)\n$/status = "Updated by Express. Your input is preserved."`,
-        "Apply an Express data-model update (no inference)",
-      );
-  }
-
   reset() {
     const agent = this.agent();
     if (!agent || this.running()) return;
@@ -167,7 +127,6 @@ export class A2ui10DemoComponent {
     agent.threadId = crypto.randomUUID();
     this.runtime.manager.setActiveThread(agent.threadId);
     agent.setState({ a2uiExpress: initialDebugState() });
-    this.draft.set(EXPRESS_PRESETS.shopping);
     this.expandedPreview.set(false);
     void this.prepare();
   }

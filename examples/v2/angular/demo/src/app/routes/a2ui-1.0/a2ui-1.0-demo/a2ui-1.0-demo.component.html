@@ -23,7 +23,7 @@
     <div>
       <h2>Describe an interface. Watch it become real.</h2>
       <p>
-        CopilotKit context + Express examples teach Chrome’s local model the UI
+        CopilotKit context + Express examples teach the local model the UI
         language. Everything runs in your browser.
       </p>
     </div>
@@ -41,26 +41,20 @@
     @switch (debug().availability) {
       @case ("enabled") {
         <span
-          >Chrome’s local model is ready. Send a request in the
+          >{{ debug().model?.model }} is ready. Send a request in the
           conversation.</span
         >
       }
       @case ("unsupported") {
         <span
-          >Prompt API unavailable. Use eligible desktop Chrome on localhost or
-          HTTPS. You can still compile and edit presets.</span
-        >
-      }
-      @case ("unavailable") {
-        <span
-          >Chrome cannot make the local model available in this session. Check
-          Chrome setup below. Presets and the compiler remain available.</span
+          >This browser cannot run the local model. Use a desktop browser with
+          Web Workers and WebAssembly.</span
         >
       }
       @case ("downloadable") {
         <span
-          >Enable the local model to download its local model. Chrome manages
-          the download.</span
+          >{{ debug().model?.model }} · {{ debug().model?.device }}. Enable the
+          model to download and load its weights.</span
         >
       }
       @case ("downloading") {
@@ -71,70 +65,63 @@
       }
       @case ("available") {
         <span
-          >The local model is installed. Enable the local model to start a
-          session.</span
+          >{{ debug().model?.model }} is installed. Enable the local model to
+          start a session.</span
         >
       }
       @default {
         <span>Model: {{ debug().availability }} · {{ debug().stage }}</span>
       }
     }
+    @if (debug().model?.fallbackReason) {
+      <span
+        >{{ debug().model?.fallbackReason }} Using Transformers.js
+        locally.</span
+      >
+    }
     <a
-      href="https://developer.chrome.com/docs/ai/prompt-api"
+      [href]="
+        debug().model?.backend === 'transformers'
+          ? 'https://huggingface.co/' + debug().model?.model
+          : 'https://developer.chrome.com/docs/ai/prompt-api'
+      "
       target="_blank"
       rel="noreferrer"
-      >Chrome setup ↗</a
+      >Model details ↗</a
     >
   </div>
   <main>
     <section class="conversation panel" aria-label="CopilotKit conversation">
       <div class="panel-heading">
-        <span><i>01</i> Conversation</span><small>CHROME PROMPT API</small>
+        <span><i>01</i> Conversation</span
+        ><small>{{
+          debug().model?.backend === "transformers"
+            ? "TRANSFORMERS.JS"
+            : "CHROME PROMPT API"
+        }}</small>
       </div>
       <copilot-chat [agentId]="agentId" class="chat" />
     </section>
     <section class="workbench">
-      <div class="presets" role="group" aria-label="Demo presets">
-        <span>TRY A PRESET</span
-        ><button (click)="preset('card')" [disabled]="!ready() || running()">
-          Card</button
-        ><button (click)="preset('form')" [disabled]="!ready() || running()">
-          Bound form</button
-        ><button
-          (click)="preset('shopping')"
-          [disabled]="!ready() || running()"
-        >
-          Shopping checkout</button
-        ><button (click)="preset('project')" [disabled]="!ready() || running()">
-          Project brief
-        </button>
-      </div>
       <div class="workspace" [class.expanded]="expandedPreview()">
         <section class="source panel">
           <div class="panel-heading">
-            <span><i>02</i> Express source</span
-            ><small>{{
-              debug().source === "model" ? "MODEL OUTPUT" : "MANUAL / PRESET"
-            }}</small>
+            <span><i>02</i> Express source</span><small>MODEL OUTPUT</small>
           </div>
           <label for="express-source" class="sr-only"
-            >Editable A2UI Express source</label
-          ><textarea
+            >Generated A2UI Express source</label
+          >
+          <textarea
             id="express-source"
             spellcheck="false"
-            [value]="draft()"
-            (input)="draft.set($any($event.target).value)"
-            [readOnly]="running()"
+            [value]="debug().dsl"
+            readonly
+            placeholder="The local model’s Express response will appear here."
           ></textarea>
           <div class="editor-footer">
-            <span>{{ draft().length }} characters · A2UI v1.0 candidate</span
-            ><button
-              class="primary"
-              (click)="compile()"
-              [disabled]="!ready() || running() || !draft().trim()"
-            >
-              Compile & render ↗
-            </button>
+            <span
+              >{{ debug().dsl.length }} characters · A2UI v1.0 candidate</span
+            ><span>Compiled automatically after generation</span>
           </div>
         </section>
         <section class="preview panel">
@@ -158,20 +145,16 @@
                 <div class="braces">&#123; &#125;</div>
                 <h3>Your interface appears here</h3>
                 <p>
-                  Enable the local model and describe a UI, or compile a preset
-                  to explore Express.
+                  Enable the local model and describe the interface you want to
+                  generate.
                 </p>
               </div></copilot-generative-ui-surface
             >
           </div>
           <div class="preview-footer">
-            <span>Native components · reactive bindings</span
-            ><button
-              (click)="update()"
-              [disabled]="running() || !activeSurfaceId()"
+            <span
+              >Native components · reactive bindings · model-generated UI</span
             >
-              Apply data update
-            </button>
           </div>
         </section>
       </div>
@@ -209,7 +192,7 @@
               {{ debug().elapsedMs }} ms · compile
               {{ debug().compileMs }} ms</small
             >
-            @if (running()) {
+            @if (running() || debug().modelStarting) {
               <button (click)="stop()">Stop</button>
             }
           </div>

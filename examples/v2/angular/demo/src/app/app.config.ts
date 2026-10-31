@@ -71,7 +71,7 @@ export const appConfig: ApplicationConfig = {
             {
               title: "Informational card",
               message:
-                'Create an informational card titled "Made by Gemini Nano" with the subtitle "Running on this Mac". Explain the three steps: a natural-language request, Express compilation, and native Angular rendering. Include a badge saying "Local model". Use a calm green accent.',
+                'Create an informational card titled "Made in this browser" with the subtitle "Running on this Mac". Explain the three steps: a natural-language request, Express compilation, and native Angular rendering. Include a badge saying "Local model". Use a calm green accent.',
             },
             {
               title: "Edit this view",

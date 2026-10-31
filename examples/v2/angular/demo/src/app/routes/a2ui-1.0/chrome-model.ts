@@ -5,34 +5,15 @@ const OPTIONS: LanguageModelCreateCoreOptions = {
   expectedOutputs: [{ type: "text", languages: ["en"] }],
 };
 
-/** CopilotKit's run data becomes real Prompt API turns, with context as data. */
-function nativePrompt(input: string): LanguageModelPrompt {
-  let data: Record<string, unknown>;
-  try {
-    data = JSON.parse(input);
-  } catch {
-    return input;
-  }
-  if (!data || !Array.isArray(data.conversation)) return input;
-  const { conversation, ...context } = data;
-  const turns = conversation.filter(
-    (turn): turn is { role: "user" | "assistant"; content: string } =>
-      !!turn &&
-      typeof turn === "object" &&
-      (turn.role === "user" || turn.role === "assistant") &&
-      typeof turn.content === "string",
-  );
-  return [
-    {
-      role: "user",
-      content: `Current application context and UI data:\n${JSON.stringify(context)}`,
-    },
-    ...turns,
-  ];
-}
+import { modelMessages } from "./model-messages";
 
 /** The browser owns the model; CopilotKit owns the conversation history. */
 export class ChromeModel {
+  readonly info = {
+    backend: "chrome" as const,
+    model: "Chrome built-in model",
+    device: "Chrome Prompt API",
+  };
   #base?: LanguageModel;
   #systemPrompt?: string;
 
@@ -80,7 +61,7 @@ export class ChromeModel {
       // A clone starts with just the system contract. History is supplied once
       // by the local agent, not accumulated again in a long-lived model session.
       const reader = session
-        .promptStreaming(nativePrompt(input), { signal })
+        .promptStreaming(modelMessages(input), { signal })
         .getReader();
       try {
         while (true) {

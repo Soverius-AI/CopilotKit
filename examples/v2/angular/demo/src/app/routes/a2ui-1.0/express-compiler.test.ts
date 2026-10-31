@@ -1,49 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { exportA2UICatalog } from "@copilotkit/shared/generative-ui";
-import { createExpressCompiler, EXPRESS_PRESETS } from "./express-compiler";
+import { createExpressCompiler, EXPRESS_EXAMPLES } from "./express-compiler";
 import { testManifest, testUI } from "./test-catalog";
 
 describe("the official Express compiler with a CopilotKit catalog", () => {
-  it.each([
-    [
-      "shopping",
-      "demo_checkout",
-      ["Slider", "RadioGroup", "TextArea", "CheckBox", "Select"],
-    ],
-    [
-      "project",
-      "demo_project",
-      ["DateTimeInput", "Slider", "RadioGroup", "TextArea", "Select"],
-    ],
-  ] as const)(
-    "compiles the %s form with validated controls and a structured submit event",
-    async (preset, event, components) => {
-      const compiler = await createExpressCompiler(exportA2UICatalog(testUI));
-      const operations = compiler.compile(
-        EXPRESS_PRESETS[preset],
-        preset,
-        testManifest,
-      );
-      const json = JSON.stringify(operations);
-      expect(json).toContain('"component":"Form"');
-      expect(json).toContain(`"name":"${event}"`);
-      for (const component of components)
-        expect(json).toContain(`"component":"${component}"`);
-      expect(json).toContain('"@call":"email"');
-      expect(json).toContain('"submit":true');
-      expect(json).toContain('"@path":"/consent"');
-      if (preset === "shopping") {
-        expect(json).toContain('"@call":"formatString"');
-        expect(json).toContain("calc(expression:");
-        expect(json).toContain('"@path":"/items/backpacks"');
-      }
-    },
-  );
-
   it("compiles the form with a two-way binding and an agent event", async () => {
     const compiler = await createExpressCompiler(exportA2UICatalog(testUI));
     const operations = compiler.compile(
-      EXPRESS_PRESETS.form,
+      EXPRESS_EXAMPLES.form,
       "form",
       testManifest,
     );
@@ -77,6 +41,25 @@ describe("the official Express compiler with a CopilotKit catalog", () => {
         updateDataModel: { surfaceId: "form", path: "/status", value: "Done" },
       },
     ]);
+  });
+
+  it("accepts an outer Markdown fence without changing the generated DSL", async () => {
+    const compiler = await createExpressCompiler(exportA2UICatalog(testUI));
+    const source = 'root = Text("Generated in a worker")';
+    expect(
+      compiler.compile(
+        `\`\`\`express\n${source}\n\`\`\``,
+        "fenced",
+        testManifest,
+      ),
+    ).toEqual(compiler.compile(source, "fenced", testManifest));
+    expect(() =>
+      compiler.compile(
+        '```express\nroot = Unknown("x")\n```',
+        "bad",
+        testManifest,
+      ),
+    ).toThrow();
   });
 
   it("rejects malformed and unknown components instead of rendering partial output", async () => {

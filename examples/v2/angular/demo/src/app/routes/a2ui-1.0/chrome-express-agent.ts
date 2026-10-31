@@ -7,10 +7,13 @@ import {
 } from "@copilotkit/shared";
 import type { A2UIOperation, GenerativeUIManifest } from "@copilotkit/shared";
 import { Observable } from "rxjs";
-import { ChromeModel } from "./chrome-model";
+import { GenerativeUISurfaceManager } from "@copilotkit/core/generative-ui";
+import type { GenerativeUI } from "@copilotkit/shared/generative-ui";
+import type { GenerativeUISurfaceContent } from "@copilotkit/shared";
+import { BrowserModel } from "./browser-model";
+import type { LocalModel, ModelInfo } from "./browser-model";
 import { createExpressCompiler, EXPRESS_COMPONENTS } from "./express-compiler";
 import type { ExpressCompiler } from "./express-compiler";
-import { demoActionSource } from "./demo-actions";
 
 export const EXPRESS_AGENT_ID = "a2ui-1.0";
 export const EXPRESS_TARGET = "express-preview";
@@ -27,7 +30,8 @@ export interface ExpressDebugState {
     | "ready"
     | "error"
     | "cancelled";
-  source: "model" | "manual";
+  source: "model";
+  model: ModelInfo | null;
   runId: string;
   surfaceId: string;
   systemPrompt: string;
@@ -47,7 +51,8 @@ export const initialDebugState = (): ExpressDebugState => ({
   downloadProgress: 0,
   modelStarting: false,
   stage: "idle",
-  source: "manual",
+  source: "model",
+  model: null,
   runId: "",
   surfaceId: "",
   systemPrompt: "",
@@ -66,14 +71,13 @@ export const initialDebugState = (): ExpressDebugState => ({
 export class ChromeExpressAgent extends AbstractAgent {
   #compiler?: ExpressCompiler;
   #manifest?: GenerativeUIManifest;
+  #ui?: GenerativeUI;
   #controller?: AbortController;
   #enableController?: AbortController;
-  #manualSource?: string;
-  #manualSurfaces = new Set<string>();
   #modelReady = false;
   #configuration = 0;
 
-  constructor(private readonly model = new ChromeModel()) {
+  constructor(private readonly model: LocalModel = new BrowserModel()) {
     super({
       agentId: EXPRESS_AGENT_ID,
       initialState: { a2uiExpress: initialDebugState() },
@@ -94,6 +98,7 @@ export class ChromeExpressAgent extends AbstractAgent {
   async configure(
     schema: Record<string, unknown>,
     manifest: GenerativeUIManifest,
+    ui: GenerativeUI,
   ) {
     const configuration = ++this.#configuration;
     this.#update({ stage: "preparing", diagnostics: [] });
@@ -105,9 +110,11 @@ export class ChromeExpressAgent extends AbstractAgent {
       if (configuration !== this.#configuration) return;
       this.#compiler = compiler;
       this.#manifest = manifest;
+      this.#ui = ui;
       this.#update({
         stage: "idle",
         availability,
+        model: this.model.info,
         systemPrompt: compiler.systemPrompt(manifest),
       });
     } catch (error) {
@@ -132,43 +139,43 @@ export class ChromeExpressAgent extends AbstractAgent {
         this.debugState.systemPrompt,
         controller.signal,
         (downloadProgress) => {
-          if (!controller.signal.aborted) this.#update({ downloadProgress });
+          if (!controller.signal.aborted)
+            this.#update({ downloadProgress, model: this.model.info });
         },
       );
       controller.signal.throwIfAborted();
       this.#modelReady = true;
       this.#update({
         availability: "enabled",
+        model: this.model.info,
         modelStarting: false,
         downloadProgress: 1,
       });
     } catch (error) {
-      if (!controller.signal.aborted)
+      if (this.#enableController === controller)
         this.#update({
-          availability: "error",
+          availability: controller.signal.aborted ? "downloadable" : "error",
           modelStarting: false,
-          diagnostics: [errorMessage(error)],
+          model: this.model.info,
+          diagnostics: controller.signal.aborted ? [] : [errorMessage(error)],
         });
     }
   }
 
-  /** The page still sends manual compilation through the same agent run. */
-  useManualSource(source: string) {
-    this.#manualSource = source;
-  }
   cancel() {
     this.#controller?.abort();
+    this.#enableController?.abort();
   }
 
   dispose() {
     ++this.#configuration;
     this.#enableController?.abort();
+    this.#enableController = undefined;
     this.cancel();
     this.model.destroy();
     this.#modelReady = false;
     this.#compiler = undefined;
-    this.#manualSource = undefined;
-    this.#manualSurfaces.clear();
+    this.#ui = undefined;
     this.#update({
       availability: "checking",
       modelStarting: false,
@@ -176,12 +183,49 @@ export class ChromeExpressAgent extends AbstractAgent {
     });
   }
 
+  /** Replay into an isolated native manager: validate real prop types without
+   * publishing anything or mutating the visible UI or user-owned values. */
+  #preflight(operations: A2UIOperation[], manifest: GenerativeUIManifest) {
+    if (!this.#ui) throw new Error("The native catalog is still loading.");
+    const manager = new GenerativeUISurfaceManager(this.#ui, {
+      onOperationRejected: ({ reason }) => {
+        throw new Error(reason);
+      },
+    });
+    manager.registerTarget(EXPRESS_TARGET, { components: EXPRESS_COMPONENTS });
+    const existing = new Map<string, GenerativeUISurfaceContent>();
+    for (const message of this.messages) {
+      if (
+        message.role === "activity" &&
+        message.activityType === "generative-ui-surface"
+      ) {
+        const content =
+          message.content as unknown as GenerativeUISurfaceContent;
+        existing.set(content.surfaceId, content);
+        manager.ingest(this.threadId, EXPRESS_AGENT_ID, content);
+      }
+    }
+    const groups = new Map<string, A2UIOperation[]>();
+    for (const operation of operations) {
+      const id = getOperationSurfaceId(operation)!;
+      groups.set(id, [...(groups.get(id) ?? []), operation]);
+    }
+    for (const [id, next] of groups) {
+      manager.ingest(this.threadId, EXPRESS_AGENT_ID, {
+        surfaceId: id,
+        target: EXPRESS_TARGET,
+        catalogId: manifest.catalogId,
+        operations: [...(existing.get(id)?.operations ?? []), ...next],
+        status: "ready",
+        rejected: [],
+      });
+    }
+  }
+
   run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable((observer) => {
       const controller = new AbortController();
       this.#controller = controller;
-      const queuedSource = this.#manualSource;
-      this.#manualSource = undefined;
       const emit = (event: Record<string, unknown>) => {
         if (!observer.closed) observer.next(event as BaseEvent);
       };
@@ -206,11 +250,6 @@ export class ChromeExpressAgent extends AbstractAgent {
           ? envelopeToManifest(envelope)
           : this.#manifest;
         const action = envelope?.metadata.extensions.copilotkit_action ?? null;
-        const source =
-          queuedSource ??
-          (action && this.#manualSurfaces.has(action.action.surfaceId)
-            ? demoActionSource(action)
-            : undefined);
         const surfaceId = `express-${input.runId}`;
         emit({
           type: EventType.STATE_SNAPSHOT,
@@ -219,7 +258,8 @@ export class ChromeExpressAgent extends AbstractAgent {
             a2uiExpress: {
               ...this.debugState,
               stage: "generating",
-              source: source === undefined ? "model" : "manual",
+              source: "model",
+              model: this.model.info,
               runId: input.runId,
               surfaceId,
               dsl: "",
@@ -236,36 +276,32 @@ export class ChromeExpressAgent extends AbstractAgent {
         try {
           if (!this.#compiler || !manifest)
             throw new Error("The Express catalog is still loading.");
-          let requestData: Record<string, unknown> | undefined;
-          if (source === undefined) {
-            if (!this.#modelReady)
-              throw new Error(
-                "Enable Chrome's local model first. You can also compile a preset without inference.",
-              );
-            // Surface data and application context are run data, never system instructions.
-            // Bounded recent turns avoid duplicating an unbounded Chrome session history.
-            const turns = input.messages
-              .filter(
-                (m) =>
-                  (m.role === "user" || m.role === "assistant") &&
-                  typeof m.content === "string",
-              )
-              .slice(-6)
-              .map((m) => ({
-                role: m.role,
-                content: String(m.content).slice(-3000),
-              }));
-            requestData = {
-              conversation: turns,
-              context: input.context,
-              surfaces: manifest.surfaces,
-              previousExpress: this.debugState.lastSuccessfulDsl.slice(-12_000),
-              action,
-              newSurfaceId: surfaceId,
-              instruction:
-                "Reply with an <a2ui> Express block. Omit surface(...) for a new view; the host selects newSurfaceId. To update an existing view, use its id with surface(id, update=true).",
-            };
-          }
+          if (!this.#modelReady)
+            throw new Error("Enable the browser model before generating.");
+          // Surface data and application context are run data, never system instructions.
+          // Bounded recent turns avoid duplicating an unbounded Chrome session history.
+          const turns = input.messages
+            .filter(
+              (m) =>
+                (m.role === "user" || m.role === "assistant") &&
+                typeof m.content === "string",
+            )
+            .slice(-6)
+            .map((m) => ({
+              role: m.role,
+              content: String(m.content).slice(-3000),
+            }));
+          const requestData = {
+            conversation: turns,
+            context: input.context,
+            surfaces: manifest.surfaces,
+            previousExpress: this.debugState.lastSuccessfulDsl.slice(-12_000),
+            action,
+            newSurfaceId: surfaceId,
+            instruction: action
+              ? "Respond to the current action using its actual values. Update the action surface with surface(id, update=true). Preserve all existing input values. Do not restart the original creation request or create a duplicate form. Reply with a complete <a2ui> Express block."
+              : "Reply with an <a2ui> Express block. Omit surface(...) for a new view; the host selects newSurfaceId. To update an existing view, use its id with surface(id, update=true).",
+          };
           let dsl = "";
           let operations: A2UIOperation[] = [];
           let compileStarted = performance.now();
@@ -273,56 +309,54 @@ export class ChromeExpressAgent extends AbstractAgent {
           const compilerFeedback: string[] = [];
           for (let attempt = 1; attempt <= 3; attempt++) {
             controller.signal.throwIfAborted();
-            dsl = source ?? "";
+            dsl = "";
             patch({
               attempt,
-              stage: source === undefined ? "generating" : "compiling",
+              stage: "generating",
               dsl,
             });
-            if (requestData) {
-              const runData = JSON.stringify({
-                ...requestData,
-                ...(compilerFeedback.length
-                  ? {
-                      conversation: [
-                        ...(requestData.conversation as {
-                          role: string;
-                          content: string;
-                        }[]),
-                        {
-                          role: "assistant",
-                          content: rejectedDsl.slice(0, 12_000),
-                        },
-                        {
-                          role: "user",
-                          content: `The Express compiler rejected your response: ${compilerFeedback.at(-1)}\nReturn a complete corrected <a2ui> block for the original request. Correct every invalid constructor or argument. Constructor names are case-sensitive: ${EXPRESS_COMPONENTS.join(", ")}. Use CheckBox, not Checkbox; gap, not spacing. Button color is primary, secondary, or danger; omit it for the default. Put form fields in Form with Event as its second argument and a submit=true Button. Declare variables outside child arrays. Do not repeat positional arguments as named arguments. Do not explain the correction.`,
-                        },
-                      ],
-                    }
-                  : {}),
-              });
-              if (runData.length > 28_000)
+            const runData = JSON.stringify({
+              ...requestData,
+              ...(compilerFeedback.length
+                ? {
+                    conversation: [
+                      ...(requestData.conversation as {
+                        role: string;
+                        content: string;
+                      }[]),
+                      {
+                        role: "assistant",
+                        content: rejectedDsl.slice(0, 12_000),
+                      },
+                      {
+                        role: "user",
+                        content: `The Express compiler rejected your response: ${compilerFeedback.at(-1)}\nReturn a complete corrected <a2ui> block for the original request. Correct every invalid constructor or argument. Constructor names are case-sensitive: ${EXPRESS_COMPONENTS.join(", ")}. Use CheckBox, not Checkbox; gap, not spacing. Button color is primary, secondary, or danger; omit it for the default. Put form fields in Form with Event as its second argument and a submit=true Button. Declare variables outside child arrays. Do not repeat positional arguments as named arguments. Do not explain the correction.`,
+                      },
+                    ],
+                  }
+                : {}),
+            });
+            if (runData.length > 28_000)
+              throw new Error(
+                "The local model context is too large. Reset the demo to start a smaller conversation.",
+              );
+            let lastPublished = 0;
+            for await (const chunk of this.model.generate(
+              runData,
+              this.debugState.systemPrompt,
+              controller.signal,
+            )) {
+              dsl += chunk;
+              if (dsl.length > 60_000)
                 throw new Error(
-                  "The local model context is too large. Reset the demo to start a smaller conversation.",
+                  "Model output exceeded the demo limit. Try a smaller interface.",
                 );
-              let lastPublished = 0;
-              for await (const chunk of this.model.generate(
-                runData,
-                this.debugState.systemPrompt,
-                controller.signal,
-              )) {
-                dsl += chunk;
-                if (dsl.length > 60_000)
-                  throw new Error(
-                    "Model output exceeded the demo limit. Try a smaller interface.",
-                  );
-                if (performance.now() - lastPublished > 80) {
-                  patch({
-                    dsl,
-                    elapsedMs: Math.round(performance.now() - started),
-                  });
-                  lastPublished = performance.now();
-                }
+              if (performance.now() - lastPublished > 80) {
+                patch({
+                  dsl,
+                  elapsedMs: Math.round(performance.now() - started),
+                });
+                lastPublished = performance.now();
               }
             }
             controller.signal.throwIfAborted();
@@ -330,9 +364,9 @@ export class ChromeExpressAgent extends AbstractAgent {
             compileStarted = performance.now();
             try {
               operations = this.#compiler.compile(dsl, surfaceId, manifest);
+              this.#preflight(operations, manifest);
               break;
             } catch (error) {
-              if (source !== undefined) throw error;
               const diagnostic = errorMessage(error);
               compilerFeedback.push(`Attempt ${attempt}: ${diagnostic}`);
               rejectedDsl = dsl;
@@ -352,8 +386,6 @@ export class ChromeExpressAgent extends AbstractAgent {
             bySurface.set(id, [...(bySurface.get(id) ?? []), operation]);
           }
           for (const [id, surfaceOperations] of bySurface) {
-            if (source !== undefined) this.#manualSurfaces.add(id);
-            else this.#manualSurfaces.delete(id);
             const messageId = `express:${input.threadId}:${id}`;
             // AG-UI strips activities from RunAgentInput; the local agent's
             // canonical transcript still holds the previous surface activity.
@@ -382,7 +414,7 @@ export class ChromeExpressAgent extends AbstractAgent {
           }
           // The visible UI lives in surface activities. A bounded DSL context
           // is selected explicitly for follow-ups, independent of debug state.
-          if (source === undefined) {
+          {
             const messageId = `express-answer:${input.runId}`;
             emit({
               type: EventType.TEXT_MESSAGE_START,
@@ -419,7 +451,10 @@ export class ChromeExpressAgent extends AbstractAgent {
           });
         } catch (error) {
           if (controller.signal.aborted) {
+            this.#modelReady = false;
+            this.model.destroy();
             patch({
+              availability: "downloadable",
               stage: "cancelled",
               elapsedMs: Math.round(performance.now() - started),
             });
