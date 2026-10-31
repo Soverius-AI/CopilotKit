@@ -34,7 +34,7 @@ Cancellation terminates the worker immediately, including an in-flight download 
 
 A2UI v1.0 is currently a release candidate. The demo caps generated output at 60,000 characters, run context at 28,000 characters, and Transformers.js generation at 3,072 new tokens. Its focused catalog omits unused presentation properties and long descriptions to leave room for generation. The legacy A2UI v0.9 and sandbox feature configuration are omitted on this route.
 
-Responses get up to three generation attempts. Compiler failures return the rejected DSL and diagnostic to the model as a repair request. Only complete, validated operations change the preview. Invalid or cancelled responses preserve the previous UI; malformed forms without submit events are rejected. Models can still fail to produce correct DSL or satisfy every requested detail. The demo reports the failure without substituting authored UI.
+Responses get up to three generation attempts. Compiler failures return the rejected DSL and diagnostic to the model as a repair request. Before publication, operations are replayed into an isolated CopilotKit native surface manager with the actual catalog. This catches literal prop-type and data-model errors that the Express parser alone can accept, and sends them back through the same model repair loop. Only complete, validated operations change the preview. Invalid or cancelled responses preserve the previous UI; malformed forms without submit events are rejected. Models can still fail to produce correct DSL or satisfy every requested detail. The demo reports the failure without substituting authored UI.
 
 The browser-local `ChromeExpressAgent` emits `STATE_SNAPSHOT` and throttled `STATE_DELTA` events under `state.a2uiExpress`, including the selected engine/model, raw DSL, compiler feedback, timings, and action. The workbench reads this state through `injectAgentStore`. Rendering uses standard `generative-ui-surface` activity events. A bounded last-successful DSL context is explicitly selected for follow-up inference; the entire debug state is not automatically included.
 
@@ -70,3 +70,16 @@ npx --package @playwright/cli playwright-cli -s=browser-model open \
 ```
 
 To verify the fallback, use a browser without `LanguageModel`, or disable that global with a test-only initialization script before navigation. Assert the absence of the API, a Transformers.js backend in agent state, real model downloads, model-generated DSL, compiled operations, rendered controls, and actual action values. Do not replace the model with a stub for this browser acceptance check.
+
+### Real-device results (2026-10-31)
+
+Chrome 156.0.8078.74 on an Apple M1 Max was tested with the native `LanguageModel` global disabled before navigation. The app selected Transformers.js automatically, downloaded the pinned optimized Qwen3.5-4B weights, and ran inference on WebGPU. No inference response was mocked or manually edited.
+
+- A Leaf & Light welcome card rendered from a clarified natural-language request in 16.4 seconds.
+- A compact checkout with eight bound controls rendered on the first generation attempt in 24.7 seconds. All eight edited values, including the country/delivery dropdowns, gift checkbox and notes, matched the `review_order` action payload. Native surface state reported no rejections.
+- The source editor was read-only and no authored UI execution controls were present.
+- The review action’s follow-up response failed validation after three attempts. All eight input values and the working surface stayed intact. A fresh native Chrome Prompt API run also rendered a card on the first attempt in 2.6 seconds.
+- Broader Form requests failed DSL validation in separate runs. Model output can omit requested details or choose a semantically odd input variant even when schema validation passes. The browser test establishes real generation, rendering, bindings and action delivery; it does not establish reliable request compliance for arbitrary forms.
+- The WASM path is implemented; this real-device inference check used WebGPU.
+
+The demo build and 21 tests pass. Repository-required package test, publint and attw checks pass. Timing-sensitive React/Angular suites were rerun with two Vitest workers, and the Ruby suite ran with the installed Ruby 3.3 runtime.

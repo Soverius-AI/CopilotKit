@@ -66,12 +66,12 @@ export const appConfig: ApplicationConfig = {
             {
               title: "Shopping inputs",
               message:
-                "Create a Moss & Fern shopping card with a two-item order summary: Monstera plant $35 and ceramic pot $18, total $53. Add bound inputs for customer name, email, street, city, country, delivery option, gift wrapping, and delivery notes. Put these controls in a Column and a Review order Button. Use Button onClick=Event review_order with every input data path in its context. Do not use a Form component or submit=true. Use a calm green title and a clean layout. Initialize every data path. Keep the total literal; no arithmetic.",
+                "Create a simple Leaf & Light checkout card with Total $53. Include eight bound controls: Name, Email, Street, City, Country dropdown with Austria and Germany, Delivery dropdown with Standard and Express, Gift wrapping checkbox, and Delivery notes. Initialize all eight paths. Add a Review order Button with a review_order Event containing all eight paths. Put controls in a flat children list. Use no Form, no nested arrays, no Spacer, and no weight, wrap, or alignment arguments. Style only the Title dark green. Use the exact declared component signatures.",
             },
             {
-              title: "Informational card",
+              title: "Welcome card",
               message:
-                'Create an informational card titled "Made in this browser" with the subtitle "Running on this Mac". Explain the three steps: a natural-language request, Express compilation, and native Angular rendering. Include a badge saying "Local model". Use a calm green accent.',
+                "Create the Leaf & Light welcome card. Use one flat array for the Card children: never put an array inside that array. Use only a Card, a Title, three Text components, and a Badge. Include New arrivals, a sentence about indoor plants, Free shipping over $50, and Vienna pickup available. Use a calm green accent and keep it compact.",
             },
             {
               title: "Edit this view",

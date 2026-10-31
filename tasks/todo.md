@@ -41,7 +41,7 @@ Live backend acceptance remains a separate preview-delivery gate.
 
 ## A2UI 1.0 Express with Chrome browser inference
 
-**Status:** Implemented. Build, automated checks, and browser compiler/UI flows verified; real Gemini Nano inference remains unverified because Chrome reports `unavailable` on this machine.
+**Status:** Implemented and verified with native Chrome inference and a real Transformers.js WebGPU fallback. Manual UI execution was removed following the user’s refinement. Model compliance remains variable for larger forms.
 **Branch:** `demo/a2ui-1.0`, created from freshly fetched `origin/main` at `bbc3f036cd`.
 **Worktree:** `/Users/wolfmanfx/Dev/CopilotKit-a2ui-1.0`.
 
@@ -112,5 +112,5 @@ User direction: remove manually authored UI execution; when Chrome Prompt API is
 - [x] Add a lazy Web Worker Transformers.js adapter with model download progress, streaming, cancellation and disposal; choose it automatically when the native API is unavailable.
 - [x] Remove preset rendering, edited-source compilation and canned form acknowledgements from the demo. Keep few-shot DSL only as model teaching context and compiler test fixtures.
 - [x] Expose the selected engine/model and loading state through AG-UI; preserve official Express compilation and native Angular rendering.
-- [ ] Test native selection and fallback, worker cancellation and failures, and real Chrome generation with the native API disabled. Verify actual input/action flow and capture model-produced results.
-- [ ] Update setup/results documentation, commit logical changes and push.
+- [x] Test native selection and fallback, worker cancellation and failures, and real Chrome generation with the native API disabled. Verify actual input/action flow and capture model-produced results.
+- [x] Update setup/results documentation, commit logical changes and push.
