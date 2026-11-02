@@ -24,6 +24,7 @@ const DESIGN_GUIDELINES_DESCRIPTION =
 function makeCustomCatalog(): Catalog<ComponentApi> {
   return new Catalog<ComponentApi>(
     "copilotkit://custom-catalog",
+    "0.9",
     [
       { name: "FlightCard", schema: z.object({ airline: z.string() }) },
       {

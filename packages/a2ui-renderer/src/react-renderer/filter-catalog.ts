@@ -1,4 +1,4 @@
-import { Catalog } from "@a2ui/web_core/v0_9";
+import type { Catalog } from "@a2ui/web_core/catalog";
 import type { ComponentApi } from "@a2ui/web_core/v0_9";
 
 /**
@@ -23,11 +23,6 @@ export function filterCatalog<T extends ComponentApi>(
       keptComponents.push(component);
     }
   }
-  const functions = Array.from(catalog.functions.values());
-  return new Catalog<T>(
-    catalog.id,
-    keptComponents,
-    functions,
-    catalog.themeSchema,
-  );
+  // Keep the protocol-specific definitions and document metadata too.
+  return catalog.withEntries(keptComponents, [...catalog.functions.values()]);
 }

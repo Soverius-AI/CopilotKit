@@ -33,6 +33,28 @@ describe("CopilotGenerativeUISurfaceView", () => {
     probes.quickAdd = undefined;
   });
 
+  it("shows a streaming surface without root only with partialPreview", () => {
+    const cards = (view: { container: HTMLElement }) =>
+      [...view.container.querySelectorAll("[data-card]")].map((card) =>
+        card.getAttribute("data-card"),
+      );
+    // The root is written last: until then the nodes have no parent.
+    const view = renderSurface(ui, [
+      { id: "a", component: "Card", productId: "a", name: "Alpha" },
+      { id: "list", component: "Grid", children: ["b"] },
+      { id: "b", component: "Card", productId: "b", name: "Beta" },
+    ]);
+    expect(cards(view)).toEqual([]);
+    view.act(() => view.fixture.componentRef.setInput("partialPreview", true));
+    // Top-level nodes in arrival order; "b" renders once, in its Grid.
+    expect(cards(view)).toEqual(["a", "b"]);
+    expect(grid(view.container).childElementCount).toBe(1);
+    view.update(
+      updateComponents({ id: "root", component: "Grid", children: ["list"] }),
+    );
+    expect(cards(view)).toEqual(["b"]);
+  });
+
   it("streams cards into a grid without remounting earlier cards", () => {
     const view = renderSurface(ui, [
       { id: "root", component: "Grid", children: ["a", "b", "c"] },
@@ -202,11 +224,15 @@ describe("CopilotGenerativeUISurfaceView", () => {
     const view = renderSurface(ui, [
       { id: "root", component: "Grid", children: ["loop"] },
     ]);
-    view.runtime.manager
-      .getSurface(THREAD_ID, SURFACE_ID)!
-      .model.componentsModel.addComponent(
-        new ComponentModel("loop", "Grid", { children: ["loop"] }),
-      );
+    const model = view.runtime.manager.getSurface(THREAD_ID, SURFACE_ID)!.model;
+    model.componentsModel.addComponent(
+      new ComponentModel(
+        "loop",
+        "Grid",
+        { children: ["loop"] },
+        model.catalog!,
+      ),
+    );
     view.update(updateDataModel("/tick", 1));
     expect(alertText(view.container)).toContain("cyclic reference to loop");
   });
@@ -216,11 +242,10 @@ describe("CopilotGenerativeUISurfaceView", () => {
     const view = renderSurface(ui, [
       { id: "root", component: "Grid", children: ["odd"] },
     ]);
-    view.runtime.manager
-      .getSurface(THREAD_ID, SURFACE_ID)!
-      .model.componentsModel.addComponent(
-        new ComponentModel("odd", "Nope", {}),
-      );
+    const model = view.runtime.manager.getSurface(THREAD_ID, SURFACE_ID)!.model;
+    model.componentsModel.addComponent(
+      new ComponentModel("odd", "Nope", {}, model.catalog!),
+    );
     view.update(updateDataModel("/tick", 1));
     expect(alertText(view.container)).toContain('unknown component "Nope"');
   });

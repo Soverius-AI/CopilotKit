@@ -105,6 +105,9 @@ const threadOptions: Array<{ id: ThreadId | undefined; label: string }> = [
             }
           </button>
 
+          <!-- Reload to initialize the browser-only demo without a runtime. -->
+          <a class="a2ui-express-link" href="/a2ui-1.0"> A2UI 1.0 Express ↗ </a>
+
           <div class="a2ui-demo-thread-tabs">
             @for (option of threadOptions; track option.label) {
               <button
@@ -165,8 +168,29 @@ const threadOptions: Array<{ id: ThreadId | undefined; label: string }> = [
 
       .a2ui-demo-toolbar {
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
         align-items: center;
+      }
+
+      .a2ui-express-link {
+        color: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 8px 12px;
+        border: 1px solid currentColor;
+        border-radius: 8px;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+
+      .a2ui-express-link:hover {
+        text-decoration: underline;
+      }
+
+      .a2ui-express-link:focus-visible {
+        outline: 2px solid currentColor;
+        outline-offset: 3px;
       }
 
       .a2ui-demo-theme-toggle {
@@ -183,6 +207,7 @@ const threadOptions: Array<{ id: ThreadId | undefined; label: string }> = [
       .a2ui-demo-thread-tabs {
         flex: 1;
         display: flex;
+        flex-wrap: wrap;
         gap: 10px;
         justify-content: center;
       }

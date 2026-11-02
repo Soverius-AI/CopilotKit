@@ -1,0 +1,58 @@
+{
+  "recipe": {
+    "model_providers": [
+      {
+        "name": "local-llama-cpp",
+        "endpoint": "http://127.0.0.1:5802/v1",
+        "provider_type": "openai",
+        "extra_headers": {},
+        "extra_body": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "api_key": "local-not-required"
+      }
+    ],
+    "model_configs": [
+      {
+        "alias": "local-coder",
+        "model": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        "provider": "local-llama-cpp",
+        "inference_parameters": {
+          "temperature": 0.2,
+          "max_tokens": 3072
+        }
+      }
+    ],
+    "mcp_providers": [],
+    "tool_configs": [],
+    "columns": [
+      {
+        "column_type": "llm-text",
+        "name": "source",
+        "drop": false,
+        "model_alias": "local-coder",
+        "system_prompt": "{{ system_prompt }}",
+        "prompt": "{{ model_request }}",
+        "with_trace": "none",
+        "extract_reasoning_content": false
+      }
+    ],
+    "processors": [],
+    "seed_config": {
+      "source": {
+        "seed_type": "local",
+        "path": "/Users/wolfmanfx/.unsloth/studio/assets/datasets/seed-uploads/144b5848317140d0afdcb53090053666_a2ui-teacher-repairs.jsonl"
+      },
+      "sampling_strategy": "ordered"
+    }
+  },
+  "run": {
+    "rows": 23,
+    "execution_type": "full",
+    "output_formats": [
+      "jsonl"
+    ]
+  }
+}

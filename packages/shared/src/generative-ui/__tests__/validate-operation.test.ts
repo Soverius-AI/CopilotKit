@@ -96,6 +96,18 @@ describe("validateOperation: version and kind", () => {
     ).toBe('unsupported version "v0.9"; use "v1.0"');
   });
 
+  it('accepts the specification\'s "1.0" as well as "v1.0"', () => {
+    expect(
+      reasonOf({ version: "1.0", deleteSurface: { surfaceId: "s1" } }),
+    ).toBe("ok");
+    expect(
+      reasonOf({
+        version: "1.0",
+        updateDataModel: { surfaceId: "s1", path: "/a", value: 1 },
+      }),
+    ).toBe("ok");
+  });
+
   it("rejects an operation without a version", () => {
     expect(reasonOf({ deleteSurface: { surfaceId: "s1" } })).toBe(
       'operation needs "version":"v1.0"',

@@ -14,12 +14,44 @@
             "index": "src/index.html",
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
-            "assets": ["src/favicon.ico", "src/assets"],
+            "webWorkerTsConfig": "tsconfig.worker.json",
+            "assets": [
+              "src/favicon.ico",
+              "src/assets"
+            ],
             "styles": [
               "../../../../packages/angular/src/styles/generated.css",
               "src/styles.css"
             ],
             "optimization": false
+          },
+          "configurations": {
+            "express-firebase": {
+              "browser": "src/main.express.ts",
+              "index": {
+                "input": "src/index.express.html",
+                "output": "index.html"
+              },
+              "tsConfig": "tsconfig.express.json",
+              "outputPath": "dist/a2ui-express",
+              "assets": [
+                "src/favicon.ico",
+                {
+                  "glob": "soverius-logo.svg",
+                  "input": "src/assets/a2ui-express",
+                  "output": "assets/a2ui-express"
+                }
+              ],
+              "optimization": true,
+              "sourceMap": false,
+              "outputHashing": "all",
+              "fileReplacements": [
+                {
+                  "replace": "src/app/routes/a2ui-1.0/deployment.ts",
+                  "with": "src/app/routes/a2ui-1.0/deployment.firebase.ts"
+                }
+              ]
+            }
           }
         },
         "serve": {

@@ -1,4 +1,5 @@
-import { Component, computed, input } from "@angular/core";
+import { Component, computed, inject, input } from "@angular/core";
+import { COPILOT_KIT_CONFIG } from "../../config";
 import type { AbstractAgent } from "@ag-ui/client";
 import type { AngularToolCall, ToolRenderer } from "../../tools";
 import { getRenderedA2UIOperations } from "./a2ui-tool-operations";
@@ -35,9 +36,11 @@ import { CopilotA2UISurfaceOutlet } from "./surface-outlet";
 export class CopilotA2UIToolRenderer implements ToolRenderer<RenderA2UIArgs> {
   readonly toolCall = input.required<AngularToolCall<RenderA2UIArgs>>();
   readonly agent = input<AbstractAgent | undefined>();
+  private readonly catalog = inject(COPILOT_KIT_CONFIG, { optional: true })
+    ?.a2ui?.catalog;
 
   protected readonly renderedOperations = computed(() =>
-    getRenderedA2UIOperations(this.toolCall()),
+    getRenderedA2UIOperations(this.toolCall(), this.catalog?.protocolVersion),
   );
 
   protected readonly tokens = computed(() =>

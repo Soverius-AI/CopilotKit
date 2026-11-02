@@ -1,0 +1,339 @@
+<div class="page">
+  <header>
+    <div class="identity">
+      <a
+        class="brand"
+        href="https://soverius.ai/"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Soverius AI home"
+      >
+        <img
+          src="assets/a2ui-express/soverius-logo.svg"
+          alt="Soverius AI"
+          width="132"
+          height="38"
+        />
+      </a>
+      <h1>A2UI <span>1.0</span> Express</h1>
+    </div>
+    <nav class="header-links" aria-label="Demo resources">
+      <a
+        href="https://a2ui.org/specification/proposals/express/"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Express docs ↗</a
+      >
+      <a
+        href="https://soverius.ai/newsletter"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Newsletter ↗</a
+      >
+      <a
+        href="https://soverius.ai/blog"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Blog ↗</a
+      >
+    </nav>
+    <div class="model-controls">
+      <span class="local-badge"
+        ><span aria-hidden="true">●</span> On device</span
+      >
+      <label class="model-picker">
+        <span class="sr-only">Inference model</span>
+        <select
+          aria-label="Inference model"
+          [value]="modelMode()"
+          (change)="selectModel($event)"
+          [disabled]="running() || debug().modelStarting"
+          title="Switching models starts a fresh conversation"
+        >
+          <option value="base">Gemma 4 E4B</option>
+          <option value="finetuned">
+            Gemma 4 {{ finetune.size }} · fine-tuned
+          </option>
+          <option value="finetuned-e2b">
+            Gemma 4 {{ finetuneE2b.size }} · fine-tuned
+          </option>
+          <option value="chrome">Chrome Prompt API · built-in</option>
+        </select>
+      </label>
+      @if (running() || debug().modelStarting) {
+        <button class="stop" (click)="stop()">Stop</button>
+      } @else {
+        <button (click)="reset()">Reset</button>
+      }
+      <button
+        class="primary"
+        (click)="enable()"
+        [disabled]="!canEnable()"
+        [attr.aria-describedby]="downloadNotice() ? 'download-notice' : null"
+      >
+        {{ enableLabel() }}
+      </button>
+    </div>
+  </header>
+
+  <div class="status" role="status" aria-live="polite">
+    <span
+      class="dot"
+      [class.enabled]="debug().availability === 'enabled'"
+    ></span>
+    @switch (debug().availability) {
+      @case ("enabled") {
+        <span>{{ modelLabel() }} ready · {{ debug().model?.device }}</span>
+      }
+      @case ("unsupported") {
+        <span>
+          @if (modelMode() === "chrome") {
+            Chrome Prompt API is unavailable. Choose a Gemma model to use
+            WebGPU.
+          } @else {
+            Gemma requires a desktop browser with WebGPU. You can also select
+            Chrome Prompt API.
+          }
+        </span>
+      }
+      @case ("unavailable") {
+        <span
+          >This model is unavailable in this browser. Choose another
+          model.</span
+        >
+      }
+      @case ("downloadable") {
+        <span>Ready to enable</span>
+      }
+      @case ("downloading") {
+        <span
+          >Preparing model…
+          {{ (debug().downloadProgress * 100).toFixed(0) }}%</span
+        >
+      }
+      @case ("error") {
+        <span
+          >Model could not start. Check the diagnostics, then enable it to
+          retry.</span
+        >
+      }
+      @case ("available") {
+        <span>Model installed · enable to start</span>
+      }
+      @default {
+        <span>Preparing the Express catalog…</span>
+      }
+    }
+    @if (downloadNotice()) {
+      <span id="download-notice" class="download-notice">{{
+        downloadNotice()
+      }}</span>
+    }
+    @if (debug().model?.fallbackReason) {
+      <span>{{ debug().model?.fallbackReason }}</span>
+    }
+    <a [href]="modelDetailsUrl()" target="_blank" rel="noreferrer"
+      >Model details ↗</a
+    >
+  </div>
+
+  <main [attr.data-expanded-panel]="expandedPanel()">
+    <section class="conversation panel" aria-label="CopilotKit conversation">
+      <div class="panel-heading">
+        <span><i>01</i> Conversation</span>
+        <div class="panel-actions">
+          <small>{{
+            debug().model?.backend === "transformers"
+              ? "TRANSFORMERS.JS"
+              : "PROMPT API"
+          }}</small>
+          <button
+            class="panel-expand"
+            (click)="togglePanel('conversation', $event)"
+            [attr.aria-expanded]="expandedPanel() === 'conversation'"
+            [attr.aria-label]="
+              expandedPanel() === 'conversation'
+                ? 'Restore conversation'
+                : 'Expand conversation'
+            "
+          >
+            {{ expandedPanel() === "conversation" ? "Restore ↙" : "Expand ↗" }}
+          </button>
+        </div>
+      </div>
+      <div class="examples" aria-label="Example prompts">
+        @for (example of examples; track example.caseId) {
+          <button
+            (click)="runExample(example.request)"
+            [disabled]="
+              running() ||
+              debug().modelStarting ||
+              debug().availability !== 'enabled'
+            "
+            [title]="example.description"
+          >
+            {{ example.label }} <span aria-hidden="true">↗</span>
+          </button>
+        }
+      </div>
+      <copilot-chat [agentId]="agentId" class="chat" />
+    </section>
+
+    <section class="workbench">
+      <div class="workspace">
+        <section class="source panel" aria-label="Express source panel">
+          <div class="panel-heading">
+            <span><i>02</i> Express source</span>
+            <button
+              class="panel-expand"
+              (click)="togglePanel('source', $event)"
+              [attr.aria-expanded]="expandedPanel() === 'source'"
+              [attr.aria-label]="
+                expandedPanel() === 'source'
+                  ? 'Restore Express source'
+                  : 'Expand Express source'
+              "
+            >
+              {{ expandedPanel() === "source" ? "Restore ↙" : "Expand ↗" }}
+            </button>
+          </div>
+          <a2ui-code-source [source]="debug().dsl" />
+          <div class="editor-footer">
+            <span>{{ debug().dsl.length }} characters</span>
+            <a
+              href="https://a2ui.org/specification/proposals/express/a2ui_express/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Syntax reference ↗</a
+            >
+            <span>A2UI v1.0 · streamed</span>
+          </div>
+        </section>
+
+        <section class="preview panel" aria-label="Native preview">
+          <div class="panel-heading">
+            <span><i>03</i> Native preview</span>
+            <button
+              class="panel-expand"
+              (click)="togglePanel('preview', $event)"
+              [attr.aria-expanded]="expandedPanel() === 'preview'"
+              [attr.aria-label]="
+                expandedPanel() === 'preview'
+                  ? 'Restore native preview'
+                  : 'Expand native preview'
+              "
+            >
+              {{ expandedPanel() === "preview" ? "Restore ↙" : "Expand ↗" }}
+            </button>
+          </div>
+          <div class="preview-canvas">
+            <copilot-generative-ui-surface
+              id="express-preview"
+              description="The live preview next to the Express editor. Render every interface here."
+              [components]="components"
+              [autoScroll]="false"
+              [partialPreview]="true"
+            >
+              <div class="empty-preview">
+                <div class="braces">&#123; &#125;</div>
+                <h3>Your interface appears here</h3>
+                <p>Enable the model and try a prompt.</p>
+              </div>
+            </copilot-generative-ui-surface>
+          </div>
+        </section>
+      </div>
+
+      <section
+        class="debug panel"
+        aria-label="Agent state debugger"
+        [class.collapsed]="!debugBodyVisible()"
+      >
+        <div class="debug-heading">
+          <div class="tabs" role="group" aria-label="Debug view">
+            <button
+              [class.selected]="tab() === 'operations'"
+              (click)="selectDebugTab('operations')"
+            >
+              Compiled JSON
+            </button>
+            <button
+              [class.selected]="tab() === 'prompt'"
+              (click)="selectDebugTab('prompt')"
+            >
+              System prompt
+            </button>
+            <button
+              [class.selected]="tab() === 'state'"
+              (click)="selectDebugTab('state')"
+            >
+              Agent state
+            </button>
+            <button
+              [class.selected]="tab() === 'data'"
+              (click)="selectDebugTab('data')"
+            >
+              Form data
+            </button>
+          </div>
+          <div class="run-status">
+            <span>{{ debug().stage }}</span>
+            <small>
+              @if (debug().source === "model" && debug().attempt) {
+                Try {{ debug().attempt }}/3 ·
+              }
+              {{ debug().elapsedMs }} ms</small
+            >
+            <button
+              class="panel-expand"
+              (click)="toggleDebugger()"
+              [attr.aria-expanded]="debugBodyVisible()"
+              aria-controls="debug-content"
+              [attr.aria-label]="
+                debugBodyVisible() ? 'Collapse debugger' : 'Show debugger'
+              "
+            >
+              {{ debugBodyVisible() ? "Hide ⌄" : "Show ⌃" }}
+            </button>
+            <button
+              class="panel-expand"
+              (click)="togglePanel('debug', $event)"
+              [attr.aria-expanded]="expandedPanel() === 'debug'"
+              [attr.aria-label]="
+                expandedPanel() === 'debug'
+                  ? 'Restore debugger'
+                  : 'Expand debugger'
+              "
+            >
+              {{ expandedPanel() === "debug" ? "Restore ↙" : "Expand ↗" }}
+            </button>
+          </div>
+        </div>
+        @if (debugBodyVisible()) {
+          <div class="debug-content" id="debug-content">
+            @if (debug().diagnostics.length) {
+              <div class="diagnostics" role="alert">
+                @for (diagnostic of debug().diagnostics; track $index) {
+                  <p>{{ diagnostic }}</p>
+                }
+              </div>
+            }
+            @if (tab() === "prompt") {
+              <pre>{{
+                debug().systemPrompt ||
+                  "Loading the catalog and Express contract…"
+              }}</pre>
+            } @else {
+              <a2ui-code-source
+                [source]="debugJson()"
+                language="json"
+                [label]="debugCodeLabel()"
+                [wrap]="true"
+              />
+            }
+          </div>
+        }
+      </section>
+    </section>
+  </main>
+</div>

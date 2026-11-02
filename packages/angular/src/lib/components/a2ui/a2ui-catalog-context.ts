@@ -14,7 +14,8 @@ export const A2UI_SCHEMA_CONTEXT_DESCRIPTION =
 export const A2UI_BASIC_CATALOG_ID =
   "https://a2ui.org/specification/v0_9/basic_catalog.json";
 
-type CatalogSchemas = Pick<A2UICatalog, "id" | "components">;
+type CatalogSchemas = Pick<A2UICatalog, "id" | "components"> &
+  Partial<Pick<A2UICatalog, "protocolVersion" | "toJson">>;
 
 const basicComponentNames = new Set(BASIC_COMPONENTS.map((api) => api.name));
 
@@ -29,8 +30,15 @@ export function buildCatalogContextValue(
   options?: { includeSchema?: boolean },
 ): string {
   const lines: string[] = ["Available A2UI catalog:"];
+  if (catalog.protocolVersion?.replace(/^v/, "") === "1.0") {
+    lines.push("Protocol: A2UI v1.0");
+  }
 
-  if (catalog.id === A2UI_BASIC_CATALOG_ID) {
+  if (
+    catalog.id === A2UI_BASIC_CATALOG_ID ||
+    catalog.id ===
+      "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+  ) {
     lines.push(`- ${catalog.id} (basic catalog)`);
     return lines.join("\n");
   }
@@ -68,8 +76,16 @@ export function buildCatalogContextValue(
 /** The catalog's component schemas in the A2UI v0.9 inline catalog format. */
 export function extractCatalogComponentSchemas(catalog: CatalogSchemas): {
   catalogId: string;
+  protocolVersion?: string;
   components: Record<string, Record<string, unknown>>;
 } {
+  if (catalog.protocolVersion?.replace(/^v/, "") === "1.0" && catalog.toJson) {
+    return catalog.toJson() as {
+      catalogId: string;
+      protocolVersion: string;
+      components: Record<string, Record<string, unknown>>;
+    };
+  }
   const components: Record<string, Record<string, unknown>> = {};
   for (const [name, component] of catalog.components) {
     const zodSchema = zodToJsonSchema(component.schema, {

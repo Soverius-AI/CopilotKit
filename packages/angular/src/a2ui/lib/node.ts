@@ -149,9 +149,7 @@ export class CopilotA2UINode {
 
   protected readonly implementation = computed(() => {
     const model = this.model();
-    return model
-      ? this.surface().catalog.components.get(model.type)
-      : undefined;
+    return model ? model.catalog.components.get(model.type) : undefined;
   });
 
   /** The implementation when the entry is an Angular component. */

@@ -1,0 +1,17 @@
+{
+  "stage": "uploaded",
+  "models": [
+    {
+      "export_id": "e4b-pilot2s40-d53063f5f606",
+      "repo_id": "wolfmanfx/gemma-4-E4B-it-A2UI-Express-ONNX",
+      "revision": "c8b774d2610221080cac3e9bf3c915ccf76f8ecb",
+      "adapter_sha256": "d53063f5f606317cd9db5dd4bfc904e034d7f73a06b068155607459acc819fe2"
+    },
+    {
+      "export_id": "e2b-mlx1s100-eff96be9f058",
+      "repo_id": "wolfmanfx/gemma-4-E2B-it-A2UI-Express-ONNX",
+      "revision": "b1e17443f869c5e22993d6492a157e58c586a117",
+      "adapter_sha256": "eff96be9f058aec7993a0b1618d1d20c60eb4519d54f54c2352865ad297490f2"
+    }
+  ]
+}

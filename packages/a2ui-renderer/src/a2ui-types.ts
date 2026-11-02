@@ -1,5 +1,5 @@
 /**
- * v0.9 A2UI type definitions for CopilotKit integration.
+ * Callback types shared by CopilotKit's A2UI 0.9 and 1.0 renderers.
  */
 
 /** Theme type - v0.9 themes are passed via createSurface message */
@@ -15,6 +15,8 @@ export interface A2UIClientEventMessage {
     surfaceId: string;
     sourceComponentId?: string;
     context?: Record<string, unknown>;
+    catalogId?: string;
+    userMessage?: string;
     timestamp?: string;
     dataContextPath?: string;
   };

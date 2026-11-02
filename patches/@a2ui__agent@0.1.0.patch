@@ -1,0 +1,15 @@
+diff --git a/package.json b/package.json
+index 348eb1e022b611b6b4169e5a3f3e275432923129..48a18d30955be51b305bd3175cd0753154b206fb 100644
+--- a/package.json
++++ b/package.json
+@@ -28,6 +28,10 @@
+     }
+   },
+   "type": "module",
++  "browser": {
++    "fs": false,
++    "path": false
++  },
+   "sideEffects": false,
+   "author": "Google",
+   "license": "Apache-2.0",

@@ -14,6 +14,7 @@ import { uniqueId } from "./shared";
         class="input"
         [class.invalid]="error()"
         [id]="inputId"
+        [placeholder]="props().placeholder ?? ''"
         [value]="props().value ?? ''"
         (input)="update($event)"
       ></textarea>
@@ -23,6 +24,7 @@ import { uniqueId } from "./shared";
         [class.invalid]="error()"
         [id]="inputId"
         [type]="type()"
+        [placeholder]="props().placeholder ?? ''"
         [value]="props().value ?? ''"
         (input)="update($event)"
       />
@@ -61,7 +63,8 @@ import { uniqueId } from "./shared";
   `,
 })
 export class CopilotA2UITextField extends CopilotA2UIBasicComponent<
-  typeof TextFieldApi
+  typeof TextFieldApi,
+  { placeholder?: string }
 > {
   protected readonly inputId = uniqueId("textfield");
   protected readonly error = computed(() => this.props().validationErrors?.[0]);

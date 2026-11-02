@@ -10,8 +10,11 @@ import { BasicProps } from "./shared";
 @Directive({
   host: { "[style.flex]": "weight()" },
 })
-export abstract class CopilotA2UIBasicComponent<Api extends ComponentApi> {
-  readonly props = input.required<BasicProps<Api>>();
+export abstract class CopilotA2UIBasicComponent<
+  Api extends ComponentApi,
+  Extra extends object = {},
+> {
+  readonly props = input.required<BasicProps<Api> & Extra>();
 
   protected readonly weight = computed(
     () => (this.props() as { weight?: number }).weight ?? null,

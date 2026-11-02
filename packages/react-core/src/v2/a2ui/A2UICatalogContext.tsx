@@ -6,7 +6,7 @@ import {
   extractCatalogComponentSchemas,
 } from "@copilotkit/a2ui-renderer";
 import {
-  A2UI_DEFAULT_GENERATION_GUIDELINES,
+  getA2UIGenerationGuidelines,
   A2UI_DEFAULT_DESIGN_GUIDELINES,
 } from "@copilotkit/shared";
 import { useCopilotKit } from "../providers/CopilotKitProvider";
@@ -80,7 +80,7 @@ export function A2UICatalogContext({
         copilotkit.addContext({
           description:
             "A2UI generation guidelines — protocol rules, tool arguments, path rules, data model format, and form/two-way-binding instructions.",
-          value: A2UI_DEFAULT_GENERATION_GUIDELINES,
+          value: getA2UIGenerationGuidelines(catalog?.protocolVersion),
           ...scope,
         }),
       );
@@ -96,7 +96,13 @@ export function A2UICatalogContext({
     return () => {
       for (const id of ids) copilotkit.removeContext(id);
     };
-  }, [copilotkit, capabilitiesValue, schemaValue, a2uiAgentsKey]);
+  }, [
+    copilotkit,
+    capabilitiesValue,
+    schemaValue,
+    a2uiAgentsKey,
+    catalog?.protocolVersion,
+  ]);
 
   return null;
 }

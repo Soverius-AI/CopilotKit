@@ -1,4 +1,4 @@
-import { Component } from "@angular/core";
+import { Component, computed } from "@angular/core";
 import { SliderApi } from "@a2ui/web_core/v0_9/basic_catalog";
 import { CopilotA2UIBasicComponent } from "./basic-component";
 import { uniqueId } from "./shared";
@@ -18,6 +18,7 @@ import { uniqueId } from "./shared";
       [id]="inputId"
       [min]="props().min ?? 0"
       [max]="props().max"
+      [step]="step()"
       [value]="props().value ?? 0"
       (input)="update($event)"
     />
@@ -48,9 +49,14 @@ import { uniqueId } from "./shared";
   `,
 })
 export class CopilotA2UISlider extends CopilotA2UIBasicComponent<
-  typeof SliderApi
+  typeof SliderApi,
+  { steps?: number }
 > {
   protected readonly inputId = uniqueId("slider");
+  protected readonly step = computed(() => {
+    const { steps, min, max } = this.props();
+    return steps && steps > 0 ? (max - (min ?? 0)) / steps : 1;
+  });
 
   protected update(event: Event): void {
     this.props().setValue(Number((event.target as HTMLInputElement).value));

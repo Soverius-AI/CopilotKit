@@ -2,6 +2,7 @@ import { Type, reflectComponentType } from "@angular/core";
 import { FunctionImplementation } from "@a2ui/web_core/v0_9";
 import { BASIC_FUNCTIONS } from "@a2ui/web_core/v0_9/basic_catalog";
 import { basicComponents } from "./basic/catalog";
+import { basicCatalogV1 } from "./basic/v1";
 import { CopilotA2UICatalog } from "./catalog";
 import {
   A2UICatalogDefinitions,
@@ -13,6 +14,8 @@ import { isWebComponentImplementation } from "./universal";
 const DEFAULT_CATALOG_ID = "copilotkit://angular-catalog";
 
 export interface CreateAngularCatalogOptions {
+  /** Wire protocol of this catalog. Existing catalogs default to 0.9. */
+  protocolVersion?: "0.9" | "1.0";
   /** Identifier advertised to the agent. */
   catalogId?: string;
   /** Functions for bindings and expressions. Defaults to the A2UI basic functions; pass `[]` to disable. */
@@ -32,6 +35,11 @@ export function createAngularCatalog<D extends A2UICatalogDefinitions>(
   components: { [K in keyof D]: Type<unknown> | A2UIWebComponent },
   options?: CreateAngularCatalogOptions,
 ): CopilotA2UICatalog {
+  const protocolVersion = options?.protocolVersion ?? "0.9";
+  const basic =
+    protocolVersion === "1.0"
+      ? [...basicCatalogV1.components.values()]
+      : basicComponents;
   const implementations = Object.entries(definitions).map(
     ([name, definition]): CopilotA2UICatalogEntry => {
       const component = components[name as keyof D];
@@ -53,10 +61,19 @@ export function createAngularCatalog<D extends A2UICatalogDefinitions>(
 
   return new CopilotA2UICatalog(
     options?.catalogId ?? DEFAULT_CATALOG_ID,
-    [
-      ...(options?.includeBasicCatalog ? basicComponents : []),
-      ...implementations,
-    ],
-    options?.functions ?? BASIC_FUNCTIONS,
+    [...(options?.includeBasicCatalog ? basic : []), ...implementations],
+    options?.functions ??
+      (protocolVersion === "1.0"
+        ? [...basicCatalogV1.functions.values()]
+        : BASIC_FUNCTIONS),
+    protocolVersion === "1.0" && options?.includeBasicCatalog
+      ? {
+          commonTypesUri: basicCatalogV1.commonTypesUri,
+          defModels: basicCatalogV1.defModels,
+          defs: basicCatalogV1.defs,
+        }
+      : undefined,
+    undefined,
+    protocolVersion,
   );
 }

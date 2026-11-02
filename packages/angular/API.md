@@ -274,6 +274,7 @@ own Angular components; see the [package README](./README.md#a2ui-with-angular-c
 - `A2UIComponentContext`
 - `A2UIComponentDefinition`
 - `A2UIProps`
+- `A2UIv1` — Official A2UI 1.0 schemas and protocol helpers for custom catalogs.
 - `A2UIWebComponent`
 - `A2UI_COMPONENT_CONTEXT`
 - `A2uiWebComponentElement`
@@ -290,6 +291,7 @@ own Angular components; see the [package README](./README.md#a2ui-with-angular-c
 - `DynamicStringSchema`
 - `WebComponentImplementation`
 - `basicCatalog`
+- `basicCatalogV1` — A2UI 1.0 basic catalog rendered with Angular components.
 - `createAngularCatalog`
 - `injectA2UIComponentContext`
 

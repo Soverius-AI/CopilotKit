@@ -154,6 +154,7 @@ describe("GenerativeUISurfaceManager", () => {
     ]);
     const firstCard = surface.model.componentsModel.get("c1");
     expect(firstCard?.properties).toMatchObject({ name: "Card c1" });
+    expect(firstCard?.catalog.id).toBe(ui.id);
 
     manager.ingest(
       "t1",
@@ -909,6 +910,45 @@ describe("GenerativeUISurfaceManager", () => {
       expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false);
       expect(manager.describeSurfaces("t1")).toEqual({
         recs: { target: "recommendations" },
+      });
+    });
+  });
+
+  describe("discardSurface", () => {
+    it("forgets a withdrawn streaming preview and frees its id", () => {
+      const { manager } = managerWith([create, grid(["a"]), card("a")]);
+      manager.setOwnedValue(surfaceKey("t1", "recs"), "/note", "typed");
+      const listener = listen(manager);
+      expect(manager.discardSurface("t1", "recs")).toBe(true);
+      expect(listener).toHaveBeenCalled();
+      expect(manager.getSurface("t1", "recs")).toBeUndefined();
+      expect(manager.getSurfaceForTarget("recommendations", "t1")).toBe(
+        undefined,
+      );
+      expect(manager.describeSurfaces("t1")).toEqual({});
+      // The id is new again: a later createSurface builds it from scratch.
+      manager.ingest("t1", "default", content([create, grid(["b"])]));
+      const surface = manager.getSurface("t1", "recs")!;
+      expect(surface.clientRejected).toEqual([]);
+      expect(surface.model.componentsModel.get("a")).toBeUndefined();
+      expect(surface.model.dataModel.get("/note")).toBeUndefined();
+    });
+
+    it("keeps a surface that was ready once, or deleted", () => {
+      const { manager } = managerWith([create, grid([])]);
+      manager.ingest(
+        "t1",
+        "default",
+        content([create, grid([])], { status: "ready" }),
+      );
+      manager.ingest("t1", "default", content([create, grid(["a"])]));
+      expect(manager.discardSurface("t1", "recs")).toBe(false);
+      expect(manager.getSurface("t1", "recs")).toBeDefined();
+
+      const deleted = managerWith([create, remove]).manager;
+      expect(deleted.discardSurface("t1", "recs")).toBe(false);
+      expect(deleted.describeSurfaces("t1")).toEqual({
+        recs: { target: "recommendations", status: "deleted" },
       });
     });
   });

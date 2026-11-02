@@ -5,17 +5,26 @@ import {
   MessageProcessor,
   SurfaceModel,
 } from "@a2ui/web_core/v0_9";
+import {
+  AgentToRendererMessageSchema,
+  type AgentToRendererMessage,
+} from "@a2ui/web_core/v1_0";
 
-function surfaceIdOf(message: A2uiMessage): string {
+type SurfaceMessage = A2uiMessage | AgentToRendererMessage;
+
+function surfaceIdOf(message: SurfaceMessage): string | undefined {
   if ("createSurface" in message) return message.createSurface.surfaceId;
   if ("updateComponents" in message) return message.updateComponents.surfaceId;
   if ("updateDataModel" in message) return message.updateDataModel.surfaceId;
-  return message.deleteSurface.surfaceId;
+  if ("deleteSurface" in message) return message.deleteSurface.surfaceId;
+  return undefined;
 }
 
 /**
- * Keeps the operations that are valid A2UI v0.9 messages; an operation without
- * a `version` is read as v0.9. Every `createSurface` is pinned to `catalogId`:
+ * Validates operations against their declared 0.9 or 1.0 protocol; unversioned
+ * operations use the configured catalog's version. A 1.0 operation may say
+ * "v1.0" or "1.0" and leaves as "1.0", the only spelling web_core accepts.
+ * Every `createSurface` is pinned to `catalogId`:
  * the renderer runs one catalog and web_core rejects surfaces naming an unknown
  * one, so a stray id from the model would otherwise blank the surface. Anything
  * else, such as a v0.8 message, is dropped with a warning.
@@ -23,22 +32,28 @@ function surfaceIdOf(message: A2uiMessage): string {
 export function normalizeA2UIOperations(
   operations: readonly unknown[],
   catalogId: string,
-): A2uiMessage[] {
+  protocolVersion: string = "0.9",
+): SurfaceMessage[] {
   return operations.flatMap((operation) => {
     const message: Record<string, unknown> = {
-      version: "v0.9",
+      version: `v${protocolVersion.replace(/^v/, "")}`,
       ...(typeof operation === "object" ? operation : {}),
     };
+    if (message["version"] === "v1.0") message["version"] = "1.0";
     if (
       message["createSurface"] &&
       typeof message["createSurface"] === "object"
     ) {
       message["createSurface"] = { ...message["createSurface"], catalogId };
     }
-    const parsed = A2uiMessageSchema.safeParse(message);
+    const schema =
+      message["version"] === "1.0"
+        ? AgentToRendererMessageSchema
+        : A2uiMessageSchema;
+    const parsed = schema.safeParse(message);
     if (parsed.success) return [parsed.data];
     console.warn(
-      "[A2UI Angular] Dropped an operation that is not an A2UI v0.9 message:",
+      `[A2UI Angular] Dropped an operation that is not an A2UI ${message["version"]} message:`,
       operation,
       parsed.error.issues,
     );
@@ -56,13 +71,22 @@ export function applyA2UIOperations<T extends ComponentApi>(
   operations: readonly unknown[],
   catalogId: string,
   theme?: Record<string, unknown>,
+  protocolVersion: string = "0.9",
 ): SurfaceModel<T>[] {
   const surfaceIds = new Set<string>();
   const exists = (surfaceId: string) =>
     processor.model.getSurface(surfaceId) !== undefined;
 
-  for (const message of normalizeA2UIOperations(operations, catalogId)) {
+  for (const message of normalizeA2UIOperations(
+    operations,
+    catalogId,
+    protocolVersion,
+  )) {
     const surfaceId = surfaceIdOf(message);
+    if (surfaceId === undefined) {
+      processor.processMessages([message]);
+      continue;
+    }
     surfaceIds.add(surfaceId);
     if ("createSurface" in message) {
       if (!exists(surfaceId)) processor.processMessages([message]);
@@ -73,12 +97,14 @@ export function applyA2UIOperations<T extends ComponentApi>(
       continue;
     }
     if (!exists(surfaceId)) {
-      processor.processMessages([
-        {
-          version: "v0.9",
-          createSurface: { surfaceId, catalogId, theme: theme ?? {} },
-        },
-      ]);
+      processor.processMessages(
+        message.version === "1.0"
+          ? { version: "1.0", createSurface: { surfaceId, catalogId } }
+          : {
+              version: message.version,
+              createSurface: { surfaceId, catalogId, theme: theme ?? {} },
+            },
+      );
     }
     processor.processMessages([message]);
   }

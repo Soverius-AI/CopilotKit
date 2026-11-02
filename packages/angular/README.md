@@ -453,6 +453,21 @@ schema keys. Props the agent has not sent yet arrive as `undefined`, so put
 defaults in the template (`label() ?? "…"`) rather than in `input("…")`.
 Containers render children with `<copilot-a2ui-child>`.
 
+For A2UI 1.0, configure `a2ui: { catalog: basicCatalogV1 }`, importing
+`basicCatalogV1` from the same entry point. Custom catalogs select 1.0 with
+`createAngularCatalog(definitions, components, { protocolVersion: "1.0", includeBasicCatalog: true })`.
+Use the exported `A2UIv1` namespace for the matching dynamic-value, action,
+and child schemas. Existing `basicCatalog` and custom catalogs without a
+version keep their 0.9 behavior.
+
+The 1.0 renderer accepts initial `components` and `dataModel` inside
+`createSurface`, `@path` bindings, `@call` expressions, and full component
+replacement on `updateComponents`. Every update must include the component
+type and every property that should remain. Surface actions retain
+CopilotKit's `{ userAction }` callback shape for compatibility. The agent
+must send 1.0 operations and use the configured catalog; a server middleware
+that forces 0.9 must also be configured for the matching protocol.
+
 ```ts
 import {
   ActionSchema,

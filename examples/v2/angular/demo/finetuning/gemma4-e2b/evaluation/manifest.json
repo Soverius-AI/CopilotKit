@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "counts": {
+    "acceptance": 12,
+    "browser_regression": 1
+  },
+  "cases_sha256": "39ad3e9236f231124791bf28b7e8af9fefda9b0f9518568a277ff7900112b41f",
+  "contains_target_dsl": false,
+  "training_allowed": false,
+  "exact_request_overlap_with_training": 0,
+  "training_validation_rows": 3,
+  "training_validation_is_not_acceptance": true,
+  "system_prompt_sha256": "2b0b389c765d474bff8f93c7e3187e03b21d1693b0f53e83d1a6ea0bf2828dd2",
+  "training_dataset_sha256": "c9dda79590cb735863e2d825469dbe47ea38d129a3ceeba67bca6e33fb1ab73e",
+  "generation": {
+    "max_new_tokens": 3072,
+    "temperature": 0,
+    "top_k": 1,
+    "top_p": 1,
+    "enable_thinking": false
+  },
+  "checks": [
+    "one complete Express block",
+    "compiler and native graph acceptance",
+    "exact requested inputs, labels and control types",
+    "unique initialized bindings",
+    "exact initial values and selection options",
+    "reachable title, facts, prices and currency",
+    "reachable submit button and named Form Event carrying every input path"
+  ],
+  "browser_checks_pending": [
+    "actual controls and submit dispatch",
+    "action reply preserves entered values and prices",
+    "widgets visible before generation completes",
+    "ONNX q4f16 loading and latency"
+  ],
+  "promotion_gate": {
+    "acceptance_first_pass_minimum": 0.9,
+    "browser_functional_pass_required": true
+  },
+  "cases": [
+    {
+      "case_id": "acceptance-aquarium-card",
+      "split": "acceptance",
+      "request_sha256": "b3b7194d6b610018db53170ef59c0cc8e2ce35d411b087de589d991361cd8411"
+    },
+    {
+      "case_id": "acceptance-podcast-card",
+      "split": "acceptance",
+      "request_sha256": "4dd3d62a2530b8597439bbd0c9eac7db2a0b16ef4ad11935212828e4aced73a3"
+    },
+    {
+      "case_id": "acceptance-energy-card",
+      "split": "acceptance",
+      "request_sha256": "0c2ae0e51e20f49ed11d7e0f53d38e59586ee9dd4fe89c78acfe4d4c173c11f2"
+    },
+    {
+      "case_id": "acceptance-software-card",
+      "split": "acceptance",
+      "request_sha256": "3cfdc80082f1bb51049039916bd1161b268f6b96078915673179b27e681d8215"
+    },
+    {
+      "case_id": "acceptance-bakery-form",
+      "split": "acceptance",
+      "request_sha256": "0019a4892d70120dc4a5377f802c43e2e2bedbe7ab26221f98cb12b265230ccc"
+    },
+    {
+      "case_id": "acceptance-tailoring-form",
+      "split": "acceptance",
+      "request_sha256": "0afee9ca14ff4925758bc4db2f5e35a6b55b9216d151f56ece91a9ad2a32ecf8"
+    },
+    {
+      "case_id": "acceptance-grooming-form",
+      "split": "acceptance",
+      "request_sha256": "8fd8b7892b968136ca84daeddf55644c25a4f208e6282292b056a16adfd98376"
+    },
+    {
+      "case_id": "acceptance-donation-form",
+      "split": "acceptance",
+      "request_sha256": "30212dc7613aa77991f00b1870c0f8cbe8df6a9a6f844b402e5a2460c50ea9bb"
+    },
+    {
+      "case_id": "acceptance-coffee-form",
+      "split": "acceptance",
+      "request_sha256": "c29473911353543d1fd842e2c000815ea78552be1fcdbadd27b45f765b075c4c"
+    },
+    {
+      "case_id": "acceptance-flower-form",
+      "split": "acceptance",
+      "request_sha256": "61d431354ba1865c8e259f665d0271cd52acc984b079a2d052a439e6b42aa104"
+    },
+    {
+      "case_id": "acceptance-bookstore-checkout",
+      "split": "acceptance",
+      "request_sha256": "d2c278d047e3e6fc3d6922b886bab6d528c055e8b476d247246573c58a71e73f"
+    },
+    {
+      "case_id": "acceptance-lunch-checkout",
+      "split": "acceptance",
+      "request_sha256": "70ffbd644d7bf45385c655b89e235eb434c70e5fb545ea06705db5c26c9279b4"
+    },
+    {
+      "case_id": "browser-shopping-10-heldout",
+      "split": "browser_regression",
+      "request_sha256": "ecd9ee81604b01ee0feaa1074abc558ffa62748bfcb5492fd9cb31f62d3ebbf1"
+    }
+  ]
+}

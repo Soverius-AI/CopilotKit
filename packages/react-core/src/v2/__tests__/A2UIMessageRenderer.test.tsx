@@ -2,6 +2,7 @@ import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, act, waitFor } from "@testing-library/react";
 import React, { useState } from "react";
 import type { Theme } from "@copilotkit/a2ui-renderer";
+import { basicCatalogV1 } from "@copilotkit/a2ui-renderer";
 
 // Imported statically, NOT with `await import()` inside each test.
 //
@@ -32,6 +33,48 @@ vi.mock("../providers", () => ({
 }));
 
 describe("A2UIMessageRenderer rendering integration", () => {
+  it("paints a 1.0 inline creation without waiting for the loading fallback timer", async () => {
+    const renderer = createA2UIMessageRenderer({
+      theme: {},
+      catalog: basicCatalogV1,
+    });
+    const Render = renderer.render as React.FC<any>;
+    const view = render(
+      <Render
+        agent={null}
+        content={{
+          a2ui_operations: [
+            {
+              version: "v1.0",
+              createSurface: {
+                surfaceId: "inline-v1",
+                catalogId: basicCatalogV1.id,
+                dataModel: { greeting: "Inline creation ready" },
+                components: [
+                  {
+                    id: "root",
+                    component: "Text",
+                    text: { "@path": "/greeting" },
+                  },
+                ],
+              },
+            },
+          ],
+        }}
+      />,
+    );
+    await waitFor(
+      () => {
+        const surface = view.container.querySelector(
+          '[data-surface-id="inline-v1"]',
+        );
+        expect(surface?.textContent).toContain("Inline creation ready");
+        expect(surface?.closest('[style*="position: absolute"]')).toBeNull();
+      },
+      { timeout: 1500 },
+    );
+    view.unmount();
+  });
   it("should render A2UI surface content via React renderer", async () => {
     const renderer = createA2UIMessageRenderer({
       theme: {} as Theme,

@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "outDir": "./out-tsc/worker",
+    "lib": ["ES2022", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/**/*.worker.ts"]
+}

@@ -5,7 +5,8 @@
  * mirroring the React renderer's catalog/basic/.
  */
 
-import { h, ref, type CSSProperties, type VNode } from "vue";
+import { h, ref } from "vue";
+import type { CSSProperties, VNode } from "vue";
 import { Catalog } from "@a2ui/web_core/v0_9";
 import {
   TextApi,
@@ -29,7 +30,8 @@ import {
   BASIC_FUNCTIONS,
 } from "@a2ui/web_core/v0_9/basic_catalog";
 
-import { createVueComponent, type VueComponentImplementation } from "./adapter";
+import { createVueComponent } from "./adapter";
+import type { VueComponentImplementation } from "./adapter";
 import {
   LEAF_MARGIN,
   STANDARD_BORDER,
@@ -632,12 +634,8 @@ const ChoicePicker = createVueComponent(
       }
     };
 
-    type ChoiceOption = {
-      label?: string | Record<string, unknown>;
-      value: string;
-    };
     const options = (props.options || []).filter(
-      (opt: ChoiceOption) =>
+      (opt) =>
         !props.filterable ||
         state.filter.value === "" ||
         String(typeof opt.label === "string" ? opt.label : "")
@@ -685,7 +683,7 @@ const ChoicePicker = createVueComponent(
               gap: "8px",
             },
           },
-          options.map((opt: ChoiceOption, i: number) => {
+          options.map((opt, i) => {
             const isSelected = values.includes(opt.value);
             const label =
               typeof opt.label === "string"
@@ -886,6 +884,7 @@ const vueBasicComponents: VueComponentImplementation[] = [
 
 export const vueBasicCatalog = new Catalog<VueComponentImplementation>(
   "https://a2ui.org/specification/v0_9/basic_catalog.json",
+  "0.9",
   vueBasicComponents,
   BASIC_FUNCTIONS,
 );

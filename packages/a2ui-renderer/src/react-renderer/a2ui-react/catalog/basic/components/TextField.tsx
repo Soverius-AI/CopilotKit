@@ -20,6 +20,7 @@ import { TextFieldApi } from "@a2ui/web_core/v0_9/basic_catalog";
 import { LEAF_MARGIN, STANDARD_BORDER, STANDARD_RADIUS } from "../utils";
 
 export const TextField = createReactComponent(TextFieldApi, ({ props }) => {
+  const { placeholder } = props as { placeholder?: string };
   const onChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -69,6 +70,7 @@ export const TextField = createReactComponent(TextFieldApi, ({ props }) => {
       )}
       {isLong ? (
         <textarea
+          placeholder={placeholder}
           id={uniqueId}
           style={{
             ...style,
@@ -81,6 +83,7 @@ export const TextField = createReactComponent(TextFieldApi, ({ props }) => {
         />
       ) : (
         <input
+          placeholder={placeholder}
           id={uniqueId}
           type={type}
           style={{

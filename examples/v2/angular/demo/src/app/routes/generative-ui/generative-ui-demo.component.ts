@@ -30,6 +30,7 @@ import type { CartItem } from "./shop-ui";
       <aside class="explainer">
         <h1>Native generative UI</h1>
         <p><a routerLink="/generative-ui/catalog">All standard components →</a></p>
+        <p><a href="/a2ui-1.0">A2UI 1.0 Express · browser inference →</a></p>
         <p>
           The agent sends A2UI operations for this app's catalog: the standard
           catalog (<code>copilotkit/standard@1</code>) plus two components of the
