@@ -28,8 +28,11 @@ import type {
   InferredComponentApiSchemaType,
   ResolveA2uiProps,
 } from "@a2ui/web_core/v0_9";
+import type { z } from "zod";
 
 export interface ReactComponentImplementation extends ComponentApi {
+  /** Reuse this renderer with another protocol's property schema. */
+  withSchema?: (schema: z.ZodTypeAny) => ReactComponentImplementation;
   /** The framework-specific rendering wrapper. */
   render: React.FC<{
     context: ComponentContext;
@@ -199,6 +202,8 @@ export function createReactComponent<Api extends ComponentApi>(
     name: api.name,
     schema: api.schema,
     render: ValidatedWrapper,
+    withSchema: (schema) =>
+      createReactComponent({ ...api, schema }, RenderComponent),
   };
 }
 

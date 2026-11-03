@@ -20,6 +20,8 @@ import { SliderApi } from "@a2ui/web_core/v0_9/basic_catalog";
 import { LEAF_MARGIN } from "../utils";
 
 export const Slider = createReactComponent(SliderApi, ({ props }) => {
+  const { steps } = props as { steps?: number };
+  const step = steps && steps > 0 ? (props.max - (props.min ?? 0)) / steps : 1;
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     props.setValue(Number(e.target.value));
   };
@@ -56,6 +58,7 @@ export const Slider = createReactComponent(SliderApi, ({ props }) => {
         type="range"
         min={props.min ?? 0}
         max={props.max}
+        step={step}
         value={props.value ?? 0}
         onChange={onChange}
         style={{ width: "100%", cursor: "pointer" }}

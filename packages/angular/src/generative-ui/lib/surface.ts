@@ -41,7 +41,10 @@ import { CopilotGenerativeUISurfaceView } from "./surface-view";
   template: `
     @if (surface(); as surface) {
       <div #element [attr.data-generative-ui-surface]="id()">
-        <copilot-generative-ui-surface-view [surface]="surface" />
+        <copilot-generative-ui-surface-view
+          [surface]="surface"
+          [partialPreview]="partialPreview()"
+        />
       </div>
     } @else {
       <ng-content />
@@ -77,6 +80,12 @@ export class CopilotGenerativeUISurface<
    * (`[data-generative-ui-surface] { scroll-margin-top: 5rem }`).
    */
   readonly autoScroll = input(true);
+  /**
+   * While a surface streams without its root component, shows its top-level
+   * components as they arrive (see `CopilotGenerativeUISurfaceView`). Off by
+   * default.
+   */
+  readonly partialPreview = input(false);
 
   readonly #runtime = inject(GENERATIVE_UI_RUNTIME);
   readonly #isBrowser = isPlatformBrowser(inject(PLATFORM_ID));

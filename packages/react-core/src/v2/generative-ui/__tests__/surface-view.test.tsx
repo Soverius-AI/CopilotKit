@@ -488,11 +488,15 @@ describe("SurfaceView", () => {
     // The manager rejects self-references at ingest, so inject the node directly
     // to exercise the renderer's own defence.
     const { push, manager } = setup();
-    manager
-      .getSurface("t1", S)!
-      .model.componentsModel.addComponent(
-        new ComponentModel("root", "Grid", { children: ["root"] }),
-      );
+    const model = manager.getSurface("t1", S)!.model;
+    model.componentsModel.addComponent(
+      new ComponentModel(
+        "root",
+        "Grid",
+        { children: ["root"] },
+        model.catalog!,
+      ),
+    );
     push(data("/tick", 1));
     expect(alertText()).toContain("cyclic reference to root");
   });

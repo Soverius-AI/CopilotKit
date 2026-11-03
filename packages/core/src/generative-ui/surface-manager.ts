@@ -159,6 +159,8 @@ export class GenerativeUISurfaceManager {
    * built again.
    */
   private readonly deletedKeys = new Set<string>();
+  /** Keys of the surfaces that were ingested with a status other than "streaming". */
+  private readonly settledKeys = new Set<string>();
   /**
    * Surfaces that share their data model, by surface key: the parts of a
    * chat surface that the prose lift split. A user write to one part goes
@@ -175,6 +177,7 @@ export class GenerativeUISurfaceManager {
   ) {
     this.webCoreCatalog = new Catalog(
       ui.id,
+      "1.0",
       [...ui.components.keys()].map((name) => ({ name, schema: z.any() })),
       [],
     );
@@ -270,7 +273,27 @@ export class GenerativeUISurfaceManager {
       surface.serverRejected = serverRejected;
       changed = true;
     }
+    if (content.status !== "streaming") this.settledKeys.add(key);
     if (changed) this.notify();
+  }
+
+  /**
+   * Forgets a surface that never left "streaming", as if it had never been
+   * ingested: `describeSurfaces` does not list it, and its id is free again.
+   * For a streaming preview that its agent withdrew before it was ever
+   * ready. A surface that was ready once, or deleted, is kept.
+   *
+   * @returns true when the surface was forgotten.
+   */
+  discardSurface(threadId: string, surfaceId: string): boolean {
+    const key = surfaceKey(threadId, surfaceId);
+    const surface = this.surfaces.get(key);
+    if (!surface || surface.deleted || this.settledKeys.has(key)) return false;
+    this.disposeSurface(key);
+    this.owned.delete(key);
+    this.linked.delete(key);
+    this.notify();
+    return true;
   }
 
   /** The surface of a `key` (see `surfaceKey`), unless it is deleted. */
@@ -845,7 +868,7 @@ export class GenerativeUISurfaceManager {
     }
     if (existing) model.componentsModel.removeComponent(id);
     model.componentsModel.addComponent(
-      new ComponentModel(id, component, properties),
+      new ComponentModel(id, component, properties, this.webCoreCatalog),
     );
   }
 }

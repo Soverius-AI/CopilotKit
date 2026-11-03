@@ -33,6 +33,7 @@ const minimalComponents: ReactComponentImplementation[] = [
 
 export const minimalCatalog = new Catalog<ReactComponentImplementation>(
   "https://a2ui.org/specification/v0_9/catalogs/minimal/minimal_catalog.json",
+  "0.9",
   minimalComponents,
   [
     createFunctionImplementation(

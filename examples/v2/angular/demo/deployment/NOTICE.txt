@@ -1,0 +1,17 @@
+Gemma 4 is developed by Google DeepMind.
+Base model: https://huggingface.co/google/gemma-4-E4B-it
+Training checkpoint: https://huggingface.co/unsloth/gemma-4-E4B-it
+ONNX conversion: https://huggingface.co/onnx-community/gemma-4-E4B-it-ONNX
+
+Modified for the CopilotKit A2UI Express browser demo by training an
+Express-focused LoRA adapter with mlx_lm on a 4-bit conversion of the
+training checkpoint, merging it into the ONNX text-session matrices and
+quantizing them for WebGPU. Adapter SHA-256:
+d53063f5f606317cd9db5dd4bfc904e034d7f73a06b068155607459acc819fe2
+
+Licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+
+The catalog-generated system guide includes CopilotKit component metadata.
+CopilotKit is copyright (c) Atai Barkai and is licensed under the MIT License.
+See LICENSE-COPILOTKIT.txt for the accompanying permission notice.

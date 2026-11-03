@@ -56,8 +56,15 @@ export function buildCatalogContextValue(
   const resolved = catalog ?? basicCatalog;
   const lines: string[] = [];
   lines.push("Available A2UI catalog:");
+  if (resolved.protocolVersion?.replace(/^v/, "") === "1.0") {
+    lines.push("Protocol: A2UI v1.0");
+  }
 
-  if (resolved.id === BASIC_CATALOG_ID) {
+  if (
+    resolved.id === BASIC_CATALOG_ID ||
+    resolved.id ===
+      "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+  ) {
     lines.push(`- ${resolved.id} (basic catalog)`);
     return lines.join("\n");
   }
@@ -100,6 +107,7 @@ export function buildCatalogContextValue(
  */
 export interface InlineCatalogSchema {
   catalogId: string;
+  protocolVersion?: string;
   components: Record<string, Record<string, unknown>>;
 }
 
@@ -122,6 +130,9 @@ export function extractCatalogComponentSchemas(
 ): InlineCatalogSchema {
   const resolved = catalog ?? basicCatalog;
   const components: Record<string, Record<string, unknown>> = {};
+  if (resolved.protocolVersion?.replace(/^v/, "") === "1.0") {
+    return resolved.toJson() as unknown as InlineCatalogSchema;
+  }
 
   for (const [name, comp] of resolved.components) {
     const zodSchema = zodToJsonSchema(comp.schema, {

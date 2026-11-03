@@ -5,7 +5,12 @@ import { CopilotA2UIBasicComponent } from "./basic-component";
 @Component({
   selector: "copilot-a2ui-video",
   template: `
-    <video class="video" controls [src]="props().url ?? ''"></video>
+    <video
+      class="video"
+      controls
+      [src]="props().url ?? ''"
+      [poster]="props().posterUrl ?? ''"
+    ></video>
   `,
   styles: `
     :host {
@@ -19,5 +24,6 @@ import { CopilotA2UIBasicComponent } from "./basic-component";
   `,
 })
 export class CopilotA2UIVideo extends CopilotA2UIBasicComponent<
-  typeof VideoApi
+  typeof VideoApi,
+  { posterUrl?: string }
 > {}

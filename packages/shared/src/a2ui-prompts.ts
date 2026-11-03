@@ -128,6 +128,25 @@ Design principles:
 
 Use the SAME surfaceId as the main surface. Match action names to button action event names.`;
 
+/** Generation instructions matching the configured renderer catalog. */
+export function getA2UIGenerationGuidelines(protocolVersion?: string): string {
+  if (protocolVersion?.replace(/^v/, "") !== "1.0") {
+    return A2UI_DEFAULT_GENERATION_GUIDELINES;
+  }
+  return A2UI_DEFAULT_GENERATION_GUIDELINES.replace(
+    "Generate A2UI v0.9 JSON.",
+    `Generate A2UI v1.0 JSON.
+Every operation must declare "version":"v1.0". Use the advertised 1.0 catalog.
+createSurface can include initial "components" and "dataModel"; it has no "theme" field.
+Each updateComponents entry fully REPLACES that component's properties. Include
+its component type and all properties that should remain, including bindings.
+Use {"@path":"/form/name"} for data bindings and {"@call":"formatString","args":{...}}
+for function calls, where the advertised property schema permits them. The
+legacy "path" and "call" spellings below are also accepted for compatibility.
+updateDataModel with value:null deletes the addressed key.`,
+  );
+}
+
 /** Description of the context entry that carries `GENERATIVE_UI_MARKDOWN_GUIDELINES`. */
 export const GENERATIVE_UI_MARKDOWN_GUIDELINES_DESCRIPTION =
   "Generative UI markdown guide: how to write UI surfaces inside ```a2ui code fences in a normal markdown reply.";

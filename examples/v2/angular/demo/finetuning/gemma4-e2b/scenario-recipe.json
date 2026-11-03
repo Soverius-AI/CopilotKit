@@ -1,0 +1,57 @@
+{
+  "recipe": {
+    "model_providers": [
+      {
+        "name": "local-llama-cpp",
+        "endpoint": "http://127.0.0.1:5802/v1",
+        "provider_type": "openai",
+        "extra_headers": {},
+        "extra_body": {
+          "chat_template_kwargs": {
+            "enable_thinking": false
+          }
+        },
+        "api_key": "local-not-required"
+      }
+    ],
+    "model_configs": [
+      {
+        "alias": "local-teacher",
+        "model": "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+        "provider": "local-llama-cpp",
+        "inference_parameters": {
+          "temperature": 0.6,
+          "max_tokens": 1100
+        }
+      }
+    ],
+    "mcp_providers": [],
+    "tool_configs": [],
+    "columns": [
+      {
+        "column_type": "llm-text",
+        "name": "request",
+        "drop": false,
+        "model_alias": "local-teacher",
+        "prompt": "Write a concise natural-language request to BUILD the interface specified below. Output only that user request, never Express, code, JSON or an explanation.\nExact specification:\n{{ spec_json }}\n\nInclude the exact title, the exact total literal, every field label and every select option, and the exact submit label. State the input type for email, dropdown, checkbox and textarea. Request exactly the listed fields, each once, and no others. Do not invent terms, agreements, payment, external requests, actual bookings or additional forms. For a form request ONE Form, a working submit button inside it, and a review beside the original editable form that shows all entered values and keeps the same total/currency and same surface. For a card with no fields, request only the exact title, total and card_text. Do not include test values as initial input values. Use a fictional demonstration, not a transaction. If stress_case is layout_wrappers, ask for clear contact/shipping sections inside the single Form. Return the entire instruction in one paragraph.\nFor a form the user request MUST explicitly say: When I submit, show the review alongside the original editable form and keep all input values. Never request a review before submission. Include every string in required_text, including any reference-code note, exactly. Include the optional edit_request as a later follow-up, not as a change already applied to the initial interface.",
+        "with_trace": "none",
+        "extract_reasoning_content": false
+      }
+    ],
+    "processors": [],
+    "seed_config": {
+      "source": {
+        "seed_type": "local",
+        "path": "/Users/wolfmanfx/.unsloth/studio/assets/datasets/seed-uploads/00ce464eef524ceea9e86c469eb0bd6f_a2ui-domain-scenario-seeds.jsonl"
+      },
+      "sampling_strategy": "ordered"
+    }
+  },
+  "run": {
+    "rows": 24,
+    "execution_type": "full",
+    "output_formats": [
+      "jsonl"
+    ]
+  }
+}

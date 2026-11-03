@@ -28,7 +28,7 @@ import {
 
 // Registered only, never rendered, so any component will do.
 const testCatalog: A2UICatalog = Object.assign(
-  new Catalog("copilotkit://test", []),
+  new Catalog("copilotkit://test", "0.9", []),
   { surfaceComponent: CopilotA2UIActivityRenderer },
 );
 
@@ -479,7 +479,7 @@ describe("CopilotKit", () => {
 
   it("lists custom components by name only when includeSchema is false", () => {
     const customCatalog: A2UICatalog = Object.assign(
-      new Catalog("copilotkit://custom-catalog", [
+      new Catalog("copilotkit://custom-catalog", "0.9", [
         { name: "FlightCard", schema: z.object({ airline: z.string() }) },
       ]),
       { surfaceComponent: CopilotA2UIActivityRenderer },
@@ -510,7 +510,7 @@ describe("CopilotKit", () => {
 
   it("includes custom component schemas in the catalog description by default", () => {
     const customCatalog: A2UICatalog = Object.assign(
-      new Catalog("copilotkit://custom-catalog", [
+      new Catalog("copilotkit://custom-catalog", "0.9", [
         { name: "FlightCard", schema: z.object({ airline: z.string() }) },
       ]),
       { surfaceComponent: CopilotA2UIActivityRenderer },

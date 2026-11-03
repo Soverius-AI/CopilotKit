@@ -1,4 +1,6 @@
 export { basicCatalog } from "./lib/basic/catalog";
+export { basicCatalogV1 } from "./lib/basic/v1";
+export * as A2UIv1 from "@a2ui/web_core/v1_0";
 export { CopilotA2UICatalog } from "./lib/catalog";
 export { CopilotA2UIChild } from "./lib/child";
 export {

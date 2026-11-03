@@ -10,7 +10,7 @@ import {
  * to the agent as the `a2uiAction` run property.
  */
 export interface A2UIClientEventMessage {
-  userAction: A2uiClientAction;
+  userAction: A2uiClientAction & { catalogId?: string; userMessage?: string };
 }
 
 export interface A2UISurfaceError {

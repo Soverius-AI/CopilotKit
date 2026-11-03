@@ -5,19 +5,10 @@
  * @a2ui/web_core's framework-agnostic primitives directly.
  */
 
-import {
-  defineComponent,
-  h,
-  ref,
-  onUnmounted,
-  type PropType,
-  type VNode,
-} from "vue";
-import {
-  ComponentContext,
-  type SurfaceModel,
-  type ComponentModel,
-} from "@a2ui/web_core/v0_9";
+import { defineComponent, h, ref, onUnmounted } from "vue";
+import type { PropType, VNode } from "vue";
+import { ComponentContext } from "@a2ui/web_core/v0_9";
+import type { SurfaceModel, ComponentModel } from "@a2ui/web_core/v0_9";
 import type { VueComponentImplementation } from "./adapter";
 
 /**
@@ -91,7 +82,7 @@ const DeferredChild = defineComponent({
         });
       }
 
-      const compImpl = props.surface.catalog.components.get(
+      const compImpl = props.surface.catalog?.components.get(
         componentModel.type,
       );
 

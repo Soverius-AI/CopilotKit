@@ -69,7 +69,7 @@ function rootText(surface: {
 }
 
 describe("applyA2UIOperations", () => {
-  const catalog = new Catalog(CATALOG_ID, [
+  const catalog = new Catalog(CATALOG_ID, "0.9", [
     { name: "Text", schema: z.object({ text: z.string() }) },
   ]);
   const processor = () => new MessageProcessor([catalog]);

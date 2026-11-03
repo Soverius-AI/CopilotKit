@@ -173,6 +173,7 @@ export function createLicenseContextValue(
 
 export {
   A2UI_DEFAULT_GENERATION_GUIDELINES,
+  getA2UIGenerationGuidelines,
   A2UI_DEFAULT_DESIGN_GUIDELINES,
   ALL_GENERATIVE_UI_GUIDE_FEATURES,
   buildGenerativeUIMarkdownGuidelines,

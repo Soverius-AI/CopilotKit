@@ -42,6 +42,8 @@ function ensureInitialized() {
  * User action with dataContextPath, as dispatched by A2UI components.
  */
 export type A2UIUserAction = {
+  catalogId?: string;
+  userMessage?: string;
   name: string;
   sourceComponentId: string;
   surfaceId: string;
@@ -173,7 +175,9 @@ function warnAboutUnpaintedSurfaces(grouped: Map<string, any[]>): void {
 function describeComponentIds(operations: any[]): string {
   const ids: string[] = [];
   for (const operation of operations) {
-    const components = operation?.updateComponents?.components;
+    const components =
+      operation?.updateComponents?.components ??
+      operation?.createSurface?.components;
     if (!Array.isArray(components)) continue;
     for (const component of components) {
       const id = component?.id;
@@ -579,7 +583,11 @@ function SurfaceMessageProcessor({
       : operations;
 
     // Error handling is done inside A2UIProvider.processMessages
-    processMessages(ops);
+    // Older payloads sometimes repeated surfaceId on the envelope. The nested
+    // operation is authoritative; newer web_core rejects that extra field.
+    processMessages(
+      ops.map(({ surfaceId: _legacySurfaceId, ...operation }) => operation),
+    );
 
     // Signal the cross-over to swap ONLY once the surface can actually paint a
     // card. A data-bound list renders nothing until its data model arrives, so
@@ -637,12 +645,19 @@ function SurfaceMessageProcessor({
  * arrival rather than a fixed delay. (OSS-162)
  */
 function surfaceHasRenderableContent(operations: any[]): boolean {
-  const componentOps = operations.filter((o) => o?.updateComponents);
-  if (!componentOps.length) return false;
-  const needsData = JSON.stringify(componentOps).includes('"path"');
+  const components = operations.flatMap(
+    (operation) =>
+      operation?.updateComponents?.components ??
+      operation?.createSurface?.components ??
+      [],
+  );
+  if (!components.length) return false;
+  const serialized = JSON.stringify(components);
+  const needsData =
+    serialized.includes('"path"') || serialized.includes('"@path"');
   if (!needsData) return true;
   return operations.some((o) => {
-    const v = o?.updateDataModel?.value;
+    const v = o?.updateDataModel?.value ?? o?.createSurface?.dataModel;
     if (!v || typeof v !== "object") return false;
     return Object.values(v).some((x) =>
       Array.isArray(x)

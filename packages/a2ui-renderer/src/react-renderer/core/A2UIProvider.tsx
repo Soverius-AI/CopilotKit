@@ -1,11 +1,21 @@
 import { createContext, useContext, useRef, useState, useMemo } from "react";
 import type { ReactNode } from "react";
-import { MessageProcessor } from "@a2ui/web_core/v0_9";
+import { MessageProcessor, RELAXED_VALIDATION } from "@a2ui/web_core/v0_9";
 import { basicCatalog } from "../a2ui-react";
+import { basicCatalogV1 } from "../a2ui-react/catalog/basic/v1";
 import type { A2UIContextValue, A2UIActions } from "./store";
 import { ThemeProvider } from "../theme/ThemeContext";
 import type { OnActionCallback } from "../types";
 import type { A2UIClientEventMessage, Theme } from "../../a2ui-types";
+
+/**
+ * Agents send A2UI 1.0 as "v1.0" or "1.0"; web_core accepts only "1.0".
+ */
+function withWireVersion(
+  message: Record<string, unknown>,
+): Record<string, unknown> {
+  return message.version === "v1.0" ? { ...message, version: "1.0" } : message;
+}
 
 /**
  * Context for stable actions (never changes reference, prevents re-renders).
@@ -35,7 +45,7 @@ export interface A2UIProviderProps {
 }
 
 /**
- * Provider component that sets up the A2UI v0.9 context for descendant components.
+ * Provider for A2UI 0.9 and 1.0 surfaces. A custom catalog selects its protocol.
  * Uses a two-context architecture for performance:
  * - A2UIActionsContext: Stable actions that never change (no re-renders)
  * - A2UIStateContext: Reactive state that triggers re-renders when needed
@@ -50,16 +60,32 @@ export function A2UIProvider({
   const onActionRef = useRef<OnActionCallback | null>(onAction ?? null);
   onActionRef.current = onAction ?? null;
 
-  // Create v0.9 MessageProcessor only once using ref
+  // The shared processor chooses an adapter from each message's wire version.
   const processorRef = useRef<MessageProcessor<any> | null>(null);
   if (!processorRef.current) {
     processorRef.current = new MessageProcessor(
-      [catalog ?? basicCatalog],
-      // Action handler: convert v0.9 Action to A2UIClientEventMessage format
-      (action: any) => {
+      catalog ? [catalog] : [basicCatalog, basicCatalogV1],
+      undefined,
+      {
+        version:
+          catalog?.protocolVersion?.replace(/^v/, "") === "1.0"
+            ? "1.0"
+            : "v0.9",
+        validationConfig: {
+          ...RELAXED_VALIDATION,
+          allowUnknownElements: false,
+        },
+      },
+    );
+    // Preserve CopilotKit's action callback shape for both wire versions.
+    // Each surface's listener is awaited by `surface.dispatchAction`; the
+    // processor-wide handler is not, since web_core 0.15.
+    processorRef.current.model.onSurfaceCreated.subscribe((surface) => {
+      surface.onAction.subscribe((action: any) => {
         if (onActionRef.current) {
           const message: A2UIClientEventMessage = {
             userAction: {
+              ...action,
               name: action?.name ?? "unknown",
               surfaceId: action?.surfaceId ?? "default",
               sourceComponentId: action?.sourceComponentId,
@@ -69,8 +95,8 @@ export function A2UIProvider({
           };
           return onActionRef.current(message);
         }
-      },
-    );
+      });
+    });
   }
   const processor = processorRef.current;
 
@@ -79,20 +105,57 @@ export function A2UIProvider({
 
   // Error state for graceful error handling
   const [error, setError] = useState<string | null>(null);
+  const failedOperationKinds = useRef<Set<string>>(new Set());
 
   // Create stable actions object once - stored in ref, never changes
   const actionsRef = useRef<A2UIActions | null>(null);
   if (!actionsRef.current) {
     actionsRef.current = {
       processMessages: (messages: Array<Record<string, unknown>>) => {
+        const kinds = [
+          "createSurface",
+          "updateComponents",
+          "updateDataModel",
+          "deleteSurface",
+        ].filter((kind) => messages.some((message) => kind in message));
         try {
-          processor.processMessages(messages as any[]);
+          processor.processMessages(messages.map(withWireVersion) as any[]);
         } catch (err) {
           console.warn("[A2UI] processMessages error:", err);
-          setError(err instanceof Error ? err.message : String(err));
+          failedOperationKinds.current = new Set(kinds);
+          const names = messages.flatMap((message) => {
+            const update = message.updateComponents as
+              | { components?: { component?: string }[] }
+              | undefined;
+            return (
+              update?.components?.flatMap((component) =>
+                component.component ? [component.component] : [],
+              ) ?? []
+            );
+          });
+          const detail = err instanceof Error ? err.message : String(err);
+          setError(
+            names.length
+              ? `${[...new Set(names)].join(", ")}: ${detail}`
+              : detail,
+          );
           return;
         }
-        setError(null);
+        // A subsequent data frame cannot repair a rejected component tree.
+        // Retain its diagnostic until that operation is corrected or the
+        // surface lifecycle starts again. Newer web_core rejects it before
+        // a component error boundary can mount.
+        if (
+          kinds.some(
+            (kind) =>
+              failedOperationKinds.current.has(kind) ||
+              kind === "createSurface" ||
+              kind === "deleteSurface",
+          )
+        ) {
+          failedOperationKinds.current.clear();
+          setError(null);
+        }
         setVersion((v) => v + 1);
       },
 
@@ -105,9 +168,12 @@ export function A2UIProvider({
       clearSurfaces: () => {
         // Process a deleteSurface for all known surfaces
         const surfaces = processor.model.surfacesMap;
-        for (const [id] of surfaces) {
+        for (const [id, surface] of surfaces) {
           processor.processMessages([
-            { version: "v0.9", deleteSurface: { surfaceId: id } } as any,
+            withWireVersion({
+              version: `v${String(surface.protocolVersion ?? "0.9").replace(/^v/, "")}`,
+              deleteSurface: { surfaceId: id },
+            }) as any,
           ]);
         }
         setVersion((v) => v + 1);

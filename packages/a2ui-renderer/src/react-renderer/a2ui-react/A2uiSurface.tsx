@@ -122,7 +122,7 @@ export const DeferredChild: React.FC<{
     );
   }
 
-  const compImpl = surface.catalog.components.get(componentModel.type);
+  const compImpl = componentModel.catalog.components.get(componentModel.type);
 
   if (!compImpl) {
     return (

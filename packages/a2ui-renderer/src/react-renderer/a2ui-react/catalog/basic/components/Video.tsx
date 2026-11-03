@@ -26,5 +26,12 @@ export const Video = createReactComponent(VideoApi, ({ props }) => {
     aspectRatio: "16/9",
   };
 
-  return <video src={props.url} controls style={style} />;
+  return (
+    <video
+      src={props.url}
+      poster={(props as { posterUrl?: string }).posterUrl}
+      controls
+      style={style}
+    />
+  );
 });

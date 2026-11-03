@@ -1,8 +1,8 @@
 import type { z } from "zod";
 import type { ZodObject, ZodRawShape } from "zod";
 import { Catalog } from "@a2ui/web_core/v0_9";
-import { BASIC_FUNCTIONS } from "@a2ui/web_core/v0_9/basic_catalog";
 import { basicCatalog, createReactComponent } from "./a2ui-react";
+import { basicCatalogV1 } from "./a2ui-react/catalog/basic/v1";
 import type { ReactComponentImplementation } from "./a2ui-react";
 import type { ComponentApi, ResolveA2uiProps } from "@a2ui/web_core/v0_9";
 
@@ -111,6 +111,8 @@ export function createCatalog<D extends CatalogDefinitions>(
   definitions: D,
   renderers: CatalogRenderers<D>,
   options?: {
+    /** Wire protocol of this catalog. Existing catalogs default to 0.9. */
+    protocolVersion?: "0.9" | "1.0";
     /** Catalog ID. Defaults to a generated URI. */
     catalogId?: string;
     /** If true, merge the built-in basic catalog components (Text, Button, Row, etc.) into this catalog. Default: false */
@@ -119,6 +121,8 @@ export function createCatalog<D extends CatalogDefinitions>(
 ): Catalog<ReactComponentImplementation> {
   const catalogId = options?.catalogId ?? "copilotkit://custom-catalog";
   const includeBasic = options?.includeBasicCatalog === true;
+  const protocolVersion = options?.protocolVersion ?? "0.9";
+  const base = protocolVersion === "1.0" ? basicCatalogV1 : basicCatalog;
 
   const customComponents: ReactComponentImplementation[] = [];
 
@@ -146,17 +150,23 @@ export function createCatalog<D extends CatalogDefinitions>(
   }
 
   const allComponents = includeBasic
-    ? [...Array.from(basicCatalog.components.values()), ...customComponents]
+    ? [...Array.from(base.components.values()), ...customComponents]
     : customComponents;
 
-  const functions = includeBasic
-    ? Array.from(basicCatalog.functions.values())
-    : [];
+  const functions = includeBasic ? Array.from(base.functions.values()) : [];
 
   return new Catalog<ReactComponentImplementation>(
     catalogId,
+    protocolVersion,
     allComponents,
     functions,
+    includeBasic
+      ? {
+          commonTypesUri: base.commonTypesUri,
+          defModels: base.defModels,
+          defs: base.defs,
+        }
+      : undefined,
   );
 }
 
@@ -210,6 +220,7 @@ export type A2UIComponentMap = Record<string, A2UIComponentDefinition<any>>;
 export function createA2UICatalog(
   components: A2UIComponentMap,
   options?: {
+    protocolVersion?: "0.9" | "1.0";
     catalogId?: string;
     includeBasicCatalog?: boolean;
   },

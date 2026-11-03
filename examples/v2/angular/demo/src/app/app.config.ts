@@ -13,11 +13,20 @@ import { provideGenerativeUIIcons } from "@copilotkit/angular/generative-ui/icon
 import { provideGenerativeUIMap } from "@copilotkit/angular/generative-ui/map";
 import { shopUI } from "./routes/generative-ui/shop-ui";
 import { CatalogAgent } from "./routes/generative-ui/catalog-agent";
+import {
+  ChromeExpressAgent,
+  EXPRESS_AGENT_ID,
+} from "./routes/a2ui-1.0/chrome-express-agent";
+import { isExpressRoutePath } from "./routes/a2ui-1.0/route-path";
 import { WildcardToolRenderComponent } from "./components/wildcard-tool-render.component";
 import { a2uiDemoSandboxFunctions } from "./routes/a2ui/a2ui-demo-sandbox-functions";
 import { dashboardCatalog } from "./routes/a2ui-angular/dashboard-catalog";
 import { routes } from "./app.routes";
 import { z } from "zod";
+
+const browserInferenceRoute =
+  typeof document !== "undefined" &&
+  isExpressRoutePath(document.location.pathname, document.baseURI);
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -33,11 +42,18 @@ export const appConfig: ApplicationConfig = {
     provideGenerativeUIIcons(),
     provideGenerativeUIMap(),
     provideCopilotKit({
-      runtimeUrl: "http://localhost:3001/api/copilotkit",
+      // This route's self-managed agent needs no server. Reload when leaving
+      // its standalone browser session to restore the other demos' runtime.
+      runtimeUrl: browserInferenceRoute
+        ? undefined
+        : "http://localhost:3001/api/copilotkit",
       licenseKey: "ck_pub_00000000000000000000000000000000",
       // The standard components page (/generative-ui/catalog) runs a scripted
       // agent in the browser.
-      agents: { "generative-ui-catalog": new CatalogAgent(shopUI.id) },
+      agents: {
+        "generative-ui-catalog": new CatalogAgent(shopUI.id),
+        [EXPRESS_AGENT_ID]: new ChromeExpressAgent(),
+      },
       renderToolCalls: [
         {
           name: "*",
@@ -46,6 +62,14 @@ export const appConfig: ApplicationConfig = {
         },
       ],
       suggestionsConfig: [
+        {
+          consumerAgentId: EXPRESS_AGENT_ID,
+          // This route has curated buttons that reset the conversation before
+          // sending prose through the same agent. Don't advertise unverified
+          // shopping/edit suggestions beside them.
+          available: "disabled",
+          suggestions: [],
+        },
         {
           consumerAgentId: "a2ui-recovery",
           available: "always",
@@ -63,13 +87,19 @@ export const appConfig: ApplicationConfig = {
         {
           instructions:
             "Suggest follow-up tasks based on the current page content",
-          available: "always",
+          available: browserInferenceRoute ? "disabled" : "always",
         },
       ],
       humanInTheLoop: [],
-      openGenerativeUI: { sandboxFunctions: a2uiDemoSandboxFunctions },
+      // The legacy demos register their own JSON schemas and generation
+      // instructions as agent context. Express already has a focused catalog
+      // in its system prompt; those unrelated contracts exceed Nano's budget
+      // and tell it to emit a different protocol.
+      openGenerativeUI: browserInferenceRoute
+        ? undefined
+        : { sandboxFunctions: a2uiDemoSandboxFunctions },
       // Render A2UI with the basic catalog plus the dashboard components.
-      a2ui: { catalog: dashboardCatalog },
+      a2ui: browserInferenceRoute ? undefined : { catalog: dashboardCatalog },
     }),
     provideCopilotChatLabels({
       chatInputPlaceholder: "Ask me anything...",

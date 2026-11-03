@@ -32,7 +32,7 @@ import type {
 import type { RuntimeEntitlementResponse } from "@copilotkit/shared";
 import {
   A2UI_DEFAULT_DESIGN_GUIDELINES,
-  A2UI_DEFAULT_GENERATION_GUIDELINES,
+  getA2UIGenerationGuidelines,
   schemaToJsonSchema,
 } from "@copilotkit/shared";
 import type { RenderActivityMessageConfig } from "./activity-renderer";
@@ -560,7 +560,7 @@ export class CopilotKit {
       this.core.addContext({
         description:
           "A2UI generation guidelines — protocol rules, tool arguments, path rules, data model format, and form/two-way-binding instructions.",
-        value: A2UI_DEFAULT_GENERATION_GUIDELINES,
+        value: getA2UIGenerationGuidelines(catalog.protocolVersion),
       }),
     );
     this.#a2UIContextIds.push(

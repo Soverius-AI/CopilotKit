@@ -11,6 +11,7 @@ import {
   Type,
 } from "@angular/core";
 import { MessageProcessor, SurfaceModel } from "@a2ui/web_core/v0_9";
+import { z } from "zod";
 import { A2UIClientEventMessage, A2UISurfaceError } from "@copilotkit/angular";
 import { applyA2UIOperations } from "./operations";
 import { A2UI_SURFACE_REVISION, CopilotA2UINode } from "./node";
@@ -167,7 +168,7 @@ type Surface = SurfaceModel<CopilotA2UICatalogEntry>;
   `,
 })
 export class CopilotA2UISurface implements OnDestroy {
-  /** A2UI operations in v0.9 or legacy shape. */
+  /** A2UI 0.9 or 1.0 operations; unversioned messages use the catalog's version. */
   readonly operations = input<readonly unknown[]>([]);
   readonly catalog = input.required<CopilotA2UICatalog>();
   /** Theme for surfaces the renderer creates itself. */
@@ -204,7 +205,7 @@ export class CopilotA2UISurface implements OnDestroy {
 
   /** Drops the processor and everything rendered from it. */
   private reset(): void {
-    this.processor?.model.dispose();
+    this.processor?.dispose();
     this.processor = null;
     this.processorCatalog = null;
     this.lastOperationsHash = "";
@@ -218,9 +219,27 @@ export class CopilotA2UISurface implements OnDestroy {
     if (!this.processor || this.processorCatalog !== catalog) {
       this.reset();
       this.processorCatalog = catalog;
-      this.processor = new MessageProcessor([catalog], (userAction) => {
-        this.action.emit({ userAction });
-      });
+      // Props can arrive over several streamed operations. Keep the advertised
+      // catalog intact, but allow missing props in the processor's copy until
+      // the next update arrives. Present values still use their declared types.
+      const streamingCatalog = catalog.withEntries(
+        [...catalog.components.values()].map((entry) => {
+          if (!(entry.schema instanceof z.ZodObject)) return entry;
+          let schema = entry.schema.partial();
+          const tabs = entry.schema.shape.tabs;
+          if (entry.name === "Tabs" && tabs instanceof z.ZodArray) {
+            schema = schema.extend({ tabs: tabs.min(0).optional() });
+          }
+          return { ...entry, schema };
+        }),
+        [...catalog.functions.values()],
+      );
+      this.processor = new MessageProcessor(
+        [streamingCatalog],
+        (userAction) => {
+          this.action.emit({ userAction });
+        },
+      );
     }
     return this.processor;
   }
@@ -256,6 +275,7 @@ export class CopilotA2UISurface implements OnDestroy {
         operations.slice(this.appliedOperationsCount),
         catalog.id,
         theme,
+        catalog.protocolVersion,
       );
       this.lastOperationsHash = hash;
       this.appliedOperationsCount = operations.length;

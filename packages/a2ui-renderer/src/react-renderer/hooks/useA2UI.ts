@@ -4,7 +4,7 @@ import { useA2UIActions, useA2UIState } from "../core/A2UIProvider";
  * Result returned by the useA2UI hook.
  */
 export interface UseA2UIResult {
-  /** Process incoming v0.9 A2UI messages */
+  /** Process incoming A2UI 0.9 or 1.0 messages. */
   processMessages: (messages: Array<Record<string, unknown>>) => void;
 
   /** Get a surface model by ID */
@@ -18,7 +18,7 @@ export interface UseA2UIResult {
 }
 
 /**
- * Main API hook for A2UI v0.9. Provides methods to process messages
+ * Main API hook for A2UI 0.9 and 1.0. Provides methods to process messages
  * and access surface state.
  */
 export function useA2UI(): UseA2UIResult {

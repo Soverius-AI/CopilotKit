@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  getA2UIGenerationGuidelines,
+  A2UI_DEFAULT_GENERATION_GUIDELINES,
   buildGenerativeUIMarkdownGuidelines,
   generativeUIGuideFeatures,
   GENERATIVE_UI_MARKDOWN_GUIDELINES,
@@ -13,6 +15,25 @@ import { buildGenerativeUIPrompt } from "../generative-ui/prompt";
 import { GENERATIVE_UI_AGENT_FUNCTION_CALLS } from "../generative-ui/types";
 
 const guide = GENERATIVE_UI_MARKDOWN_GUIDELINES;
+
+describe("legacy renderer protocol guidelines", () => {
+  it("keeps existing 0.9 instructions unchanged", () => {
+    expect(getA2UIGenerationGuidelines()).toBe(
+      A2UI_DEFAULT_GENERATION_GUIDELINES,
+    );
+    expect(getA2UIGenerationGuidelines("0.9")).toBe(
+      A2UI_DEFAULT_GENERATION_GUIDELINES,
+    );
+  });
+  it("advertises 1.0 replacement, binding, and inline creation rules", () => {
+    const instructions = getA2UIGenerationGuidelines("1.0");
+    expect(instructions).toContain('"version":"v1.0"');
+    expect(instructions).toContain("fully REPLACES");
+    expect(instructions).toContain('"@path"');
+    expect(instructions).toContain('"dataModel"');
+    expect(instructions).not.toContain("v0.9");
+  });
+});
 
 describe("GENERATIVE_UI_MARKDOWN_GUIDELINES", () => {
   it("tells the model to write fences, and never to call a tool", () => {

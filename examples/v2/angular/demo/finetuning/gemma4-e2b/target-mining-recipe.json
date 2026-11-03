@@ -1,0 +1,58 @@
+{
+  "recipe": {
+    "model_providers": [
+      {
+        "name": "studio-e2b",
+        "is_local": true,
+        "endpoint": "",
+        "provider_type": "openai",
+        "extra_headers": {},
+        "extra_body": {
+          "enable_thinking": false,
+          "reasoning_effort": "none"
+        }
+      }
+    ],
+    "model_configs": [
+      {
+        "alias": "target-e2b",
+        "model": "unsloth/gemma-4-E2B-it",
+        "provider": "studio-e2b",
+        "inference_parameters": {
+          "temperature": 0,
+          "top_p": 1,
+          "max_tokens": 3072
+        }
+      }
+    ],
+    "mcp_providers": [],
+    "tool_configs": [],
+    "columns": [
+      {
+        "column_type": "llm-text",
+        "name": "source",
+        "drop": false,
+        "model_alias": "target-e2b",
+        "system_prompt": "{{ system_prompt }}",
+        "prompt": "{{ model_request }}",
+        "with_trace": "none",
+        "extract_reasoning_content": false
+      }
+    ],
+    "processors": [],
+    "seed_config": {
+      "source": {
+        "seed_type": "local",
+        "path": "/Users/wolfmanfx/.unsloth/studio/assets/datasets/seed-uploads/ca183a2d87624787ad6a1e19e9341528_a2ui-model-inputs.jsonl"
+      },
+      "sampling_strategy": "ordered"
+    }
+  },
+  "run": {
+    "rows": 12,
+    "execution_type": "full",
+    "output_formats": [
+      "jsonl"
+    ]
+  }
+}

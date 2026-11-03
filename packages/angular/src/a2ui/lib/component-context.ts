@@ -42,7 +42,12 @@ export function createA2UIComponentContext(
     theme: (context.theme ?? {}) as Record<string, unknown>,
     surface,
     dataContext: context.dataContext,
-    dispatch: (action) => context.dispatchAction(action),
+    dispatch: (action) => {
+      if (!action || typeof action !== "object" || Array.isArray(action)) {
+        return Promise.reject(new Error("An A2UI action must be an object."));
+      }
+      return context.dispatchAction(action as Record<string, unknown>);
+    },
     set: (path, value) => context.dataContext.set(path, value),
   };
 }
